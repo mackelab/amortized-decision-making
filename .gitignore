@@ -1,3 +1,8 @@
+# custom folders to ignore
+*.egg-info
+data
+docs
+tests
 
 # Created by https://www.toptal.com/developers/gitignore/api/venv,python,visualstudiocode,jupyternotebooks,macos,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=venv,python,visualstudiocode,jupyternotebooks,macos,linux
@@ -205,7 +210,7 @@ cython_debug/
 [Ll]ib
 [Ll]ib64
 [Ll]ocal
-[Ss]cripts
+#[Ss]cripts
 pyvenv.cfg
 pip-selfcheck.json
 

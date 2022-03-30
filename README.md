@@ -1,3 +1,3 @@
-# Loss Calibration for sbi
+# Loss-Calibration for sbi
 
-Repository for the master thesis on "Loss Calibration for Simulation-Based Inference" by Mila
+Master thesis on "Loss-Calibration for Simulation-Based Inference" by Mila
