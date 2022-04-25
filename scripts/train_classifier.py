@@ -32,6 +32,7 @@ def main(args):
     clf, loss_values = train(
         clf, x_train, th_train, threshold, epochs, criterion, optimizer
     )
+    clf._summary["weights"] = weights  # work-around to save weights
 
     # save trained classifier and metadata
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")

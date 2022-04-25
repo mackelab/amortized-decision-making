@@ -81,7 +81,7 @@ class FeedforwardNN(nn.Module):
                 )
         self._summary = dict(
             epochs=epochs,
-            weights=0,
+            weights=None,
             treshold=threshold,
             optimizer=optimizer,
             ntrain=th_train.shape[0],
@@ -140,7 +140,7 @@ def train(
 
     model._summary = dict(
         epochs=epochs,
-        weights=0,
+        weights=None,
         treshold=threshold,
         optimizer=optimizer,
         ntrain=th_train.shape[0],
