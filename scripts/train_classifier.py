@@ -37,6 +37,7 @@ def main(args):
     # save trained classifier and metadata
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
     torch.save(clf, path.join(args.save_dir, f"{timestamp}_1d_classifier.pt"))
+    torch.save(clf, path.join(args.save_dir, f"{timestamp}_loss.pt"))
     with open(
         path.join(args.save_dir, "classifiers.csv"), "a", encoding="UTF8", newline=""
     ) as f:
