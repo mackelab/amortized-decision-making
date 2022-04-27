@@ -19,6 +19,11 @@ def main(args):
     # load data
     th_train = torch.load(path.join(args.data_dir, "th_train.pt"))
     x_train = torch.load(path.join(args.data_dir, "x_train.pt"))
+    if args.ntrain > th_train.shape[0]:
+        raise ValueError("Not enough samples available, create a new dataset first.")
+    elif args.ntrain < th_train.shape[0]:
+        th_train = th_train[: args.ntrain]
+        x_train = x_train[: args.ntrain]
 
     threshold = args.T
     weights = args.weights
