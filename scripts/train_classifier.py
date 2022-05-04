@@ -27,6 +27,7 @@ def main(args):
 
     threshold = args.T
     weights = args.weights
+
     # training
     clf = FeedforwardNN(1, [16], 1)
 
