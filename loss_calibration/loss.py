@@ -66,12 +66,16 @@ def BCELoss_weighted(weights, threshold):
         Returns:
             float: loss value
         """
+        assert (
+            prediction.shape == target.shape == theta.shape
+        ), "All arguments should have the same shape."
+
         step_loss = StepLoss_weighted(weights, threshold)
         prediction = torch.clamp(prediction, min=1e-7, max=1 - 1e-7)
         bce = -target * torch.log(prediction) * step_loss(theta, 0) - (
             1 - target
         ) * torch.log(1 - prediction) * step_loss(theta, 1)
-        return torch.mean(bce)
+        return bce
 
     return loss
 
