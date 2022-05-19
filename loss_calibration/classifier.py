@@ -127,7 +127,7 @@ def train(
     ckp_path: str = None,
     ckp_interval: int = 200,
     model_dir: str = None,
-    device: str = "cpu",
+    device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
     """train classifier until convergence
 
@@ -151,6 +151,7 @@ def train(
     Returns:
         Tuple[nn.Module, torch.Tensor]: trained classifier, training loss values
     """
+
     max_num_epochs = 2**31 - 1 if max_num_epochs is None else max_num_epochs
 
     _summary = dict(
