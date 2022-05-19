@@ -4,7 +4,7 @@ import argparse
 from loss_calibration.classifier import FeedforwardNN, train
 import torch
 from datetime import datetime
-from os import path, mkdir
+from os import device_encoding, path, mkdir
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import csv
@@ -13,17 +13,18 @@ import json
 
 def main(args):
     torch.manual_seed(args.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # load data
-    th_train = torch.load(path.join(args.data_dir, "th_train.pt"))
-    x_train = torch.load(path.join(args.data_dir, "x_train.pt"))
+    th_train = torch.load(path.join(args.data_dir, "th_train.pt"), map_location=device)
+    x_train = torch.load(path.join(args.data_dir, "x_train.pt"), map_location=device)
     if args.ntrain > th_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
     elif args.ntrain < th_train.shape[0]:
         th_train = th_train[: args.ntrain]
         x_train = x_train[: args.ntrain]
-    th_val = torch.load(path.join(args.data_dir, "th_val.pt"))
-    x_val = torch.load(path.join(args.data_dir, "x_val.pt"))
+    th_val = torch.load(path.join(args.data_dir, "th_val.pt"), map_location=device)
+    x_val = torch.load(path.join(args.data_dir, "x_val.pt"), map_location=device)
 
     threshold = args.T
     costs = args.costs
