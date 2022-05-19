@@ -53,7 +53,7 @@ def main(args):
     # training
     print(
         f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nweights: {args.costs}\nthreshold: {args.T}\
-            \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\n"
+            \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\ndevice: {device}"
     )
     clf = FeedforwardNN(1, [16], 1)
 
