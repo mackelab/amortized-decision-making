@@ -22,6 +22,8 @@ def main(args):
     elif args.ntrain < th_train.shape[0]:
         th_train = th_train[: args.ntrain]
         x_train = x_train[: args.ntrain]
+    th_val = torch.load(path.join(args.data_dir, "th_val.pt"))
+    x_val = torch.load(path.join(args.data_dir, "x_val.pt"))
 
     threshold = args.T
     costs = args.costs
@@ -60,13 +62,13 @@ def main(args):
         clf,
         x_train,
         th_train,
+        x_val,
+        th_val,
         costs,
         threshold,
-        stop_after_epochs=0,
         max_num_epochs=epochs,
         model_dir=model_dir,
     )
-    clf._summary["costs"] = costs  # work-around to save weights
 
     # save trained classifier and metadata
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
@@ -80,7 +82,7 @@ def main(args):
             [timestamp, str(costs), threshold, epochs, "Adam", th_train.shape[0]]
         )
 
-    plt.plot(torch.arange(epochs).detach().numpy(), loss_values)
+    plt.plot(torch.arange(loss_values.shape[0]).detach().numpy(), loss_values)
     plt.title("Loss curve")
     plt.ylabel("loss")
     plt.xlabel("epochs")
@@ -93,7 +95,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--seed", type=int, default=9834, help="Set seed for reproducibility."
     )
-    parser.add_argument("--epochs", type=int, default=5000, help="Number of epochs")
+    parser.add_argument("--epochs", type=int, default=10000, help="Number of epochs")
     parser.add_argument(
         "--costs",
         type=lambda s: [float(item) for item in s.split(",")],

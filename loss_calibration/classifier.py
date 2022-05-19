@@ -2,8 +2,9 @@ import torch
 from torch import nn
 import shutil
 from os import path
-from typing import Callable
+from typing import Callable, Dict
 from loss_calibration.loss import BCELoss_weighted
+from copy import deepcopy
 
 
 class FeedforwardNN(nn.Module):
@@ -32,11 +33,6 @@ class FeedforwardNN(nn.Module):
 
         # Activation function
         self.sigmoid = nn.Sigmoid()
-
-        # Summary
-        self._summary = dict(
-            epochs=[], weights=[], treshold=[], optimizer=[], ntrain=[]
-        )
 
     def forward(self, x: torch.Tensor):
         out = self.input_layer(x)
@@ -119,88 +115,177 @@ def train(
     model: nn.Module,
     x_train: torch.Tensor,
     th_train: torch.Tensor,
+    x_val: torch.Tensor,
+    th_val: torch.Tensor,
     costs: list,
     threshold: float,
-    stop_after_epochs: int,
-    max_num_epochs: int,
+    stop_after_epochs: int = 20,
+    max_num_epochs: int = None,
     learning_rate: float = 5e-4,
     batch_size: int = 10000,
     resume_training: bool = False,
     ckp_path: str = None,
+    ckp_interval: int = 200,
     model_dir: str = None,
+    device: str = "cpu",
 ):
     """train classifier until convergence
 
     Args:
-        model (nn.Module): classifier to train
+        model (nn.Module): network instance to train
         x_train (torch.Tensor): training data - observations
-        th_train (troch.Tensor): training data - parameters
-        threshold (float): threshold for binary decisions
-        stop_after_epochs (int): number of epoch to wait for improvement on the validation data before terminating training
-        max_num_epochs (int): maximum number of epoch to train
-        criterion (Callable): Loss criterion to compute the incurred loss given prediction, true label and theta
-        optimizer (_type_): Optimizer
+        th_train (torch.Tensor): training data - parameters
+        x_val (torch.Tensor): validation data - observations
+        th_val (torch.Tensor): validation data - parameters
+        costs (list): costs of misclassification, for FN and FP
+        threshold (float): threshold for binarized decisions
+        stop_after_epochs (int, optional): Number of epochs to wait for improvement on the validation data before terminating training. Defaults to 20.
+        max_num_epochs (int, optional): Maximum number of epochs to train for. Defaults to None.
+        learning_rate (float, optional): Learning rate. Defaults to 5e-4.
         batch_size (int, optional): Training batch size. Defaults to 10000.
-        resume_training (bool, optional): Whether to resume training. Defaults to True.
+        resume_training (bool, optional): Whether to resume training. Defaults to False.
+        ckp_path (str, optional): Path to the checkpoint file in case training didn't complete. Defaults to None.
+        model_dir (str, optional): Directory to save the trained classifier to. Defaults to None.
+        device (str, optional): Device. Defaults to "cpu".
 
     Returns:
-        Tuple[nn.Module, torch.Tensor]: trained classifier, loss values
+        Tuple[nn.Module, torch.Tensor]: trained classifier, training loss values
     """
     max_num_epochs = 2**31 - 1 if max_num_epochs is None else max_num_epochs
 
+    _summary = dict(
+        val_losses=[],
+        train_losses=[],
+    )
+
     d_train = (th_train > threshold).float()
+    d_val = (th_val > threshold).float()
     # dataset = data.TensorDataset(th_train, x_train, d_train)
     # train_loader = data.DataLoader(dataset, batch_size=batch_size)  # , shuffle=True)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = BCELoss_weighted(costs, threshold)
 
-    start_epoch = 0
-    loss_values = torch.empty([0])
     if resume_training:
-        model, optimizer, start_epoch, loss_values = load_checkpoint(
-            ckp_path, model, optimizer
-        )
+        (
+            model,
+            optimizer,
+            epoch,
+            _best_val_loss,
+            _best_model_state_dict,
+            _epochs_since_last_improvement,
+        ) = load_checkpoint(ckp_path, model, optimizer)
+    else:
+        epoch = 0
+        _best_val_loss = float("inf")
+        _best_model_state_dict = None
+        _epochs_since_last_improvement = 0
 
-    for epoch in range(start_epoch, max_num_epochs):
+    model.to(device)
+
+    while epoch <= max_num_epochs:
+        # for epoch in range(start_epoch, max_num_epochs):
         # for theta_batch, x_batch, d_batch in train_loader:
         model.train()
+        # train_loss_sum = 0
         optimizer.zero_grad()
 
         predictions = model(x_train)
         loss = criterion(predictions, d_train, th_train).mean(dim=0)
 
         with torch.no_grad():
-            loss_values = torch.cat((loss_values, loss))
+            _summary["train_losses"].append(loss.item())
 
         loss.backward()
         optimizer.step()
 
-        if (epoch + 1) % 200 == 0:  # TODO: or model is better
+        epoch += 1
+
+        # check validation performance
+        model.eval()
+        with torch.no_grad():
+            preds_val = model(x_val)
+            val_loss = criterion(preds_val, d_val, th_val).mean()
+
+        _summary["val_losses"].append(val_loss)
+
+        (
+            converged,
+            _best_model_state_dict,
+            _epochs_since_last_improvement,
+            _best_val_loss,
+        ) = check_converged(
+            model,
+            val_loss,
+            _best_val_loss,
+            _best_model_state_dict,
+            _epochs_since_last_improvement,
+            epoch,
+            stop_after_epochs,
+        )
+
+        is_best = _epochs_since_last_improvement == 0
+        if (epoch + 1) % ckp_interval == 0 or is_best:
             checkpoint = {
                 "epoch": epoch + 1,
                 "state_dict": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
-                "training_loss": loss_values,
+                "training_losses": torch.as_tensor(_summary["train_losses"]),
+                "validation_losses": torch.as_tensor(_summary["val_losses"]),
+                "_best_val_loss": _best_val_loss,
+                "_best_model_state_dict": _best_model_state_dict,
+                "_epochs_since_last_improvement": _epochs_since_last_improvement,
             }
-            is_best = False  # TODO: validation performance
 
             save_checkpoint(checkpoint, is_best, model_dir)
 
+        if (epoch + 1) % ckp_interval == 0:
             print(
-                f"{epoch}\t L = {loss.item():.8f}",
+                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {loss.item():.8f}",
                 end="\r",
             )
+        if converged:
+            print(f"Converged after {epoch} epochs.")
+            break
+        elif max_num_epochs == epoch:
+            print(
+                f"Maximum number of epochs `max_num_epochs={max_num_epochs}` reached,"
+                "but network has not yet fully converged. Consider increasing it."
+            )
 
-    model._summary = dict(
-        epochs=max_num_epochs,
-        weights=None,
-        treshold=threshold,
-        optimizer=optimizer,
-        ntrain=th_train.shape[0],
+    return deepcopy(model), torch.as_tensor(_summary["train_losses"])
+
+
+def check_converged(
+    model: nn.Module,
+    _val_loss: torch.Tensor,
+    _best_val_loss: torch.Tensor,
+    _best_model_state_dict: Dict,
+    _epochs_since_last_improvement: int,
+    epoch: int,
+    stop_after_epochs: int,
+):
+    converged = False
+
+    # (Re)-start the epoch count with the first epoch or any improvement.
+    if epoch == 0 or _val_loss < _best_val_loss:
+        _best_val_loss = _val_loss
+        _epochs_since_last_improvement = 0
+        _best_model_state_dict = deepcopy(model.state_dict())
+    else:
+        _epochs_since_last_improvement += 1
+
+    # If no validation improvement over many epochs, stop training.
+    if _epochs_since_last_improvement > stop_after_epochs - 1:
+        model.load_state_dict(_best_model_state_dict)
+        converged = True
+
+    return (
+        converged,
+        _best_model_state_dict,
+        _epochs_since_last_improvement,
+        _best_val_loss,
     )
-
-    return model, loss_values
 
 
 def save_checkpoint(state, is_best, model_dir):
@@ -215,4 +300,13 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
-    return model, optimizer, checkpoint["epoch"] - 1, checkpoint["training_loss"]
+
+    return (
+        model,
+        optimizer,
+        checkpoint["epoch"] - 1,
+        checkpoint["training_loss"],
+        checkpoint["_best_val_loss"],
+        checkpoint["_best_model_state_dict"],
+        checkpoint["_epochs_since_last_improvement"],
+    )
