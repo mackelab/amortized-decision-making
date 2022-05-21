@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-import shutil
 from os import path
 from typing import Callable, Dict
 from loss_calibration.loss import BCELoss_weighted
@@ -125,7 +124,7 @@ def train(
     batch_size: int = 10000,
     resume_training: bool = False,
     ckp_path: str = None,
-    ckp_interval: int = 200,
+    ckp_interval: int = 500,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
@@ -290,11 +289,12 @@ def check_converged(
 
 
 def save_checkpoint(state, is_best, model_dir):
-    f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
-    torch.save(state, f_path)
     if is_best:
         best_fpath = path.join(model_dir, "best_model.pt")
-        shutil.copyfile(f_path, best_fpath)
+        torch.save(state, best_fpath)
+    else:
+        f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
+        torch.save(state, f_path)
 
 
 def load_checkpoint(checkpoint_path, model, optimizer):
