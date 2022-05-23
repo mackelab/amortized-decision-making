@@ -12,7 +12,7 @@ def StepLoss_weighted(weights, threshold):
         function: loss function L(theta, prediction)
     """
 
-    assert len(weights) == 2
+    assert len(weights) == 2, f"Expected 2, got {len(weights)}"
 
     def loss(theta, decision):
         """custom loss function (BCE with class weights)
