@@ -52,7 +52,7 @@ def main(args):
 
     # training
     print(
-        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nweights: {args.costs}\nthreshold: {args.T}\
+        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\ncosts: {args.costs}\nthreshold: {args.T}\
             \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\ndevice: {device}"
     )
     clf = FeedforwardNN(1, [16], 1)
@@ -72,17 +72,6 @@ def main(args):
     )
 
     # save trained classifier and metadata
-    timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
-    torch.save(clf, path.join(model_dir, f"{timestamp}_final_model.pt"))
-    torch.save(loss_values, path.join(model_dir, f"{timestamp}_loss.pt"))
-    with open(
-        path.join(args.save_dir, "classifiers.csv"), "a", encoding="UTF8", newline=""
-    ) as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [timestamp, str(costs), threshold, epochs, "Adam", th_train.shape[0]]
-        )
-
     plt.plot(torch.arange(loss_values.shape[0]).detach().numpy(), loss_values)
     plt.title("Loss curve")
     plt.ylabel("loss")
