@@ -1,7 +1,7 @@
 import torch
 import glob
 from os import path
-from loss_calibration.loss import BCELoss_weighted
+from loss_calibration.loss import BCELoss_weighted, StepLoss_weighted
 
 
 def post_ratio(post, x_o, loss, lower=0.0, upper=5.0, resolution=500):
@@ -17,18 +17,18 @@ def post_ratio(post, x_o, loss, lower=0.0, upper=5.0, resolution=500):
 if __name__ == "__main__":
     threshold = 2.0
     costs = [5.0, 1.0]
-    bce_loss = BCELoss_weighted(costs, threshold)
+    step_loss = StepLoss_weighted(costs, threshold)
 
     # load test data
-    th_test = torch.load(path.join("./data/1d_classifier/", "th_test.pt"))
-    x_test = torch.load(path.join("./data/1d_classifier/", "x_test.pt"))
+    th_test = torch.load(path.join("../data/1d_classifier/", "th_test.pt"))
+    x_test = torch.load(path.join("../data/1d_classifier/", "x_test.pt"))
     d_test = (th_test > threshold).float()
     N_test = th_test.shape[0]
     print("N_test = ", N_test)
 
     # load sbi posterior
     flow = "nsf"
-    files = sorted(glob.glob(path.join("./results/sbi/", f"2022-05*{flow}*0.pt")))
+    files = sorted(glob.glob(path.join("../results/sbi/", f"2022-05*{flow}*0.pt")))
     print(f"Generating plots for:")
     # files = [files[-2]] + files[:-2]
     posteriors = []
@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     for i, p in enumerate(posteriors):
         preds = torch.as_tensor(
-            [post_ratio(p, x_o, bce_loss) for x_o in x_test]
+            [post_ratio(p, x_o, step_loss) for x_o in x_test]
         ).unsqueeze(dim=1)
         torch.save(
             preds,
