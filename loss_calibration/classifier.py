@@ -237,7 +237,7 @@ def train(
                 "_epochs_since_last_improvement": _epochs_since_last_improvement,
             }
 
-            save_checkpoint(checkpoint, is_best, model_dir)
+            save_checkpoint(checkpoint, is_best, ckp_interval, model_dir)
 
         if (epoch + 1) % ckp_interval == 0:
             print(
@@ -253,7 +253,10 @@ def train(
                 "but network has not yet fully converged. Consider increasing it."
             )
 
-    return deepcopy(model), torch.as_tensor(_summary["train_losses"])
+    return (
+        deepcopy(model.load_state_dict(_best_model_state_dict)),  # best model
+        torch.as_tensor(_summary["train_losses"]),  # training loss
+    )
 
 
 def check_converged(
@@ -288,13 +291,13 @@ def check_converged(
     )
 
 
-def save_checkpoint(state, is_best, model_dir):
+def save_checkpoint(state, is_best, save_interval, model_dir):
+    if state["epoch"] % save_interval == 0:
+        f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
+        torch.save(state, f_path)
     if is_best:
         best_fpath = path.join(model_dir, "best_model.pt")
         torch.save(state, best_fpath)
-    else:
-        f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
-        torch.save(state, f_path)
 
 
 def load_checkpoint(checkpoint_path, model, optimizer):
@@ -311,3 +314,21 @@ def load_checkpoint(checkpoint_path, model, optimizer):
         checkpoint["_best_model_state_dict"],
         checkpoint["_epochs_since_last_improvement"],
     )
+
+
+def get_stats(clf, x_test, d_test, th_test, loss_criterion):
+    clf.eval()
+    preds_test = clf(x_test)
+    preds_test_bin = (preds_test > 0.5).float()
+
+    tn = torch.logical_and(preds_test_bin == 0, d_test == 0).sum()
+    tp = torch.logical_and(preds_test_bin == 1, d_test == 1).sum()
+    fn = torch.logical_and(preds_test_bin == 0, d_test == 1).sum()
+    fp = torch.logical_and(preds_test_bin == 1, d_test == 0).sum()
+
+    tpr = tp / (tp + fn)
+    tnr = tn / (tn + fp)
+    acc = (tp + tn) / (tn + tp + fn + fp)
+    loss = loss_criterion(preds_test, d_test, th_test).mean(dim=0).detach()
+
+    return tpr, tnr, acc, loss
