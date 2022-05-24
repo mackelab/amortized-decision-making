@@ -246,7 +246,7 @@ def train(
             )
         if converged:
             print(f"Converged after {epoch} epochs.")
-            break
+            # break
         elif max_num_epochs == epoch:
             print(
                 f"Maximum number of epochs `max_num_epochs={max_num_epochs}` reached,"
