@@ -28,6 +28,7 @@ def main(args):
 
     threshold = args.T
     costs = args.costs
+    learning_rate = args.lr
 
     # create directory & save metadata
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
@@ -52,7 +53,7 @@ def main(args):
 
     # training
     print(
-        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\ncosts: {args.costs}\nthreshold: {args.T}\
+        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nepochs: {args.lr}\ncosts: {args.costs}\nthreshold: {args.T}\
             \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\ndevice: {device}"
     )
     clf = FeedforwardNN(1, [16], 1)
@@ -67,6 +68,7 @@ def main(args):
         th_val,
         costs,
         threshold,
+        learning_rate=learning_rate,
         max_num_epochs=epochs,
         model_dir=model_dir,
     )
@@ -86,6 +88,8 @@ if __name__ == "__main__":
         "--seed", type=int, default=9834, help="Set seed for reproducibility."
     )
     parser.add_argument("--epochs", type=int, default=10000, help="Number of epochs")
+    parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
+
     parser.add_argument(
         "--costs",
         type=lambda s: [float(item) for item in s.split(",")],
