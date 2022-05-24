@@ -118,7 +118,7 @@ def train(
     th_val: torch.Tensor,
     costs: list,
     threshold: float,
-    stop_after_epochs: int = 20,
+    stop_after_epochs: int = 200,
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
     batch_size: int = 10000,
@@ -256,6 +256,7 @@ def train(
     return (
         deepcopy(model.load_state_dict(_best_model_state_dict)),  # best model
         torch.as_tensor(_summary["train_losses"]),  # training loss
+        torch.as_tensor(_summary["validation_losses"]),  # validation loss
     )
 
 
