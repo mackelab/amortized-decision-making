@@ -61,7 +61,7 @@ def main(args):
 
     epochs = args.epochs
 
-    clf, loss_values = train(
+    clf, loss_values_train, loss_values_val = train(
         clf,
         x_train,
         th_train,
@@ -75,10 +75,20 @@ def main(args):
     )
 
     # save trained classifier and metadata
-    plt.plot(torch.arange(loss_values.shape[0]).detach().numpy(), loss_values)
+    plt.plot(
+        torch.arange(loss_values_train.shape[0]).detach().numpy(),
+        loss_values_train,
+        label="train",
+    )
+    plt.plot(
+        torch.arange(loss_values_train.shape[0]).detach().numpy(),
+        loss_values_val,
+        label="val",
+    )
     plt.title("Loss curve")
     plt.ylabel("loss")
     plt.xlabel("epochs")
+    plt.legend()
     plt.savefig(path.join(model_dir, f"{timestamp}_loss.pdf"))
 
 

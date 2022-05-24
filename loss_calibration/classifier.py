@@ -154,8 +154,8 @@ def train(
     max_num_epochs = 2**31 - 1 if max_num_epochs is None else max_num_epochs
 
     _summary = dict(
-        val_losses=[],
-        train_losses=[],
+        validation_losses=[],
+        training_losses=[],
     )
 
     d_train = (th_train > threshold).float()
@@ -194,7 +194,7 @@ def train(
         loss = criterion(predictions, d_train, th_train).mean(dim=0)
 
         with torch.no_grad():
-            _summary["train_losses"].append(loss.item())
+            _summary["training_losses"].append(loss.item())
 
         loss.backward()
         optimizer.step()
@@ -207,7 +207,7 @@ def train(
             preds_val = model(x_val)
             val_loss = criterion(preds_val, d_val, th_val).mean()
 
-        _summary["val_losses"].append(val_loss)
+        _summary["validation_losses"].append(val_loss)
 
         (
             converged,
@@ -230,8 +230,8 @@ def train(
                 "epoch": epoch + 1,
                 "state_dict": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
-                "training_losses": torch.as_tensor(_summary["train_losses"]),
-                "validation_losses": torch.as_tensor(_summary["val_losses"]),
+                "training_losses": torch.as_tensor(_summary["training_losses"]),
+                "validation_losses": torch.as_tensor(_summary["validation_losses"]),
                 "_best_val_loss": _best_val_loss,
                 "_best_model_state_dict": _best_model_state_dict,
                 "_epochs_since_last_improvement": _epochs_since_last_improvement,
@@ -255,7 +255,7 @@ def train(
 
     return (
         deepcopy(model.load_state_dict(_best_model_state_dict)),  # best model
-        torch.as_tensor(_summary["train_losses"]),  # training loss
+        torch.as_tensor(_summary["training_losses"]),  # training loss
         torch.as_tensor(_summary["validation_losses"]),  # validation loss
     )
 
