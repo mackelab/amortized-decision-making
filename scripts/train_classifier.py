@@ -45,6 +45,7 @@ def main(args):
         "seed": args.seed,
         "architecture": "1-16-1",  # TODO: save correct model architecture
         "optimizer": "Adam",
+        "learning_rate": learning_rate,
         "Ntrain": th_train.shape[0],
         "threshold": threshold,
         "costs": costs,
