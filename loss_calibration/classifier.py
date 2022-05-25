@@ -187,7 +187,6 @@ def train(
         # for epoch in range(start_epoch, max_num_epochs):
         # for theta_batch, x_batch, d_batch in train_loader:
         model.train()
-        # train_loss_sum = 0
         optimizer.zero_grad()
 
         predictions = model(x_train)

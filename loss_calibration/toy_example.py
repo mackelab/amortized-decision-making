@@ -3,6 +3,17 @@ from torch.distributions import Normal
 from sbi.utils import BoxUniform
 from loss_calibration.loss import StepLoss_weighted
 
+prior = BoxUniform(
+    [0.0],
+    [
+        5.0,
+    ],
+)
+
+
+def simulator(theta):
+    return 50 + 0.5 * theta * (5 - theta) ** 4 + 10 * torch.randn(theta.shape)
+
 
 def evaluate_prior(theta, low=0.0, high=5.0):
     prior = BoxUniform([low], [high])
@@ -71,10 +82,7 @@ def prediction_gt_posterior(
     x_o, lower=0.0, upper=5.0, resolution=500, costs=[5.0, 1.0], threshold=2.0
 ):
     loss_fn, loss_fp = exp_post_loss(x_o, lower, upper, resolution, costs, threshold)
-    if loss_fn < loss_fp:
-        return 0.0
-    else:
-        return 1.0
+    return (loss_fn > loss_fp).float()
 
 
 def posterior_ratio(
