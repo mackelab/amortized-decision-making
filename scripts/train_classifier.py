@@ -28,6 +28,7 @@ def main(args):
 
     threshold = args.T
     costs = args.costs
+    hidden_layers = args.hidden
     learning_rate = args.lr
 
     # create directory & save metadata
@@ -43,7 +44,7 @@ def main(args):
         print(f"Directory {model_dir} already exists.")
     metadata = {
         "seed": args.seed,
-        "architecture": "1-16-1",  # TODO: save correct model architecture
+        "architecture": f"1-{'-'.join(map(str, hidden_layers))}-1",
         "optimizer": "Adam",
         "learning_rate": learning_rate,
         "Ntrain": th_train.shape[0],
@@ -54,10 +55,10 @@ def main(args):
 
     # training
     print(
-        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nepochs: {args.lr}\ncosts: {args.costs}\nthreshold: {args.T}\
+        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nlearning rate: {args.lr}\ncosts: {args.costs}\nthreshold: {args.T}\
             \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\ndevice: {device}"
     )
-    clf = FeedforwardNN(1, [16], 1)
+    clf = FeedforwardNN(1, hidden_layers, 1)
 
     epochs = args.epochs
 
@@ -75,36 +76,43 @@ def main(args):
     )
 
     # save trained classifier and metadata
-    plt.plot(
+    fig, ax = plt.subplots(1, 1)
+    ax.plot(
         torch.arange(loss_values_train.shape[0]).detach().numpy(),
         loss_values_train,
         label="train",
     )
-    plt.plot(
+    ax.plot(
         torch.arange(loss_values_train.shape[0]).detach().numpy(),
         loss_values_val,
         label="val",
     )
-    plt.title("Loss curve")
-    plt.ylabel("loss")
-    plt.xlabel("epochs")
-    plt.legend()
-    plt.savefig(path.join(model_dir, f"{timestamp}_loss.pdf"))
+    ax.set_title("Loss curve")
+    ax.set_ylabel("loss")
+    ax.set_xlabel("epochs")
+    ax.legend()
+    fig.savefig(path.join(model_dir, f"{timestamp}_loss.pdf"))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training the classifier")
 
     parser.add_argument(
-        "--seed", type=int, default=9834, help="Set seed for reproducibility."
+        "--seed", type=int, default=0, help="Set seed for reproducibility."
     )
-    parser.add_argument("--epochs", type=int, default=10000, help="Number of epochs")
-    parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
+    parser.add_argument(
+        "--hidden",
+        type=lambda s: [int(item) for item in s.split(",")],
+        default=[100, 100, 100],
+        help="List specifying the architecture of the network",
+    )
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
 
     parser.add_argument(
         "--costs",
         type=lambda s: [float(item) for item in s.split(",")],
-        default=[1.0, 1.0],
+        default=[5.0, 1.0],
         help="List specifying the cost of misclassification",
     )
     parser.add_argument(
@@ -113,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ntrain",
         type=int,
-        default=50000,
+        default=500000,
         help="Number of training samples",
     )
     parser.add_argument(
@@ -129,5 +137,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # TODO: train classifier
     main(args)
