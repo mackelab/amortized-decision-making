@@ -55,7 +55,7 @@ def train(
     th_val: torch.Tensor,
     costs: list,
     threshold: float,
-    stop_after_epochs: int = 200,
+    stop_after_epochs: int = 50,
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
     batch_size: int = 5000,
@@ -188,8 +188,9 @@ def train(
                 "but network has not yet fully converged. Consider increasing it."
             )
 
+    model.load_state_dict(_best_model_state_dict)  # best model
     return (
-        deepcopy(model.load_state_dict(_best_model_state_dict)),  # best model
+        deepcopy(model),  # best model
         torch.as_tensor(_summary["training_losses"]),  # training loss
         torch.as_tensor(_summary["validation_losses"]),  # validation loss
     )
