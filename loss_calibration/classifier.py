@@ -134,7 +134,8 @@ def train(
             optimizer.step()
 
         epoch += 1
-        _summary["training_losses"].append(train_loss_sum / int(th_train.shape[0]))
+        avg_train_loss = train_loss_sum / int(th_train.shape[0])
+        _summary["training_losses"].append(avg_train_loss)
 
         # check validation performance
         model.eval()
@@ -176,7 +177,7 @@ def train(
 
         if (epoch + 1) % ckp_interval == 0:
             print(
-                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {loss.item():.8f}\t last_improvement  = {_epochs_since_last_improvement}",
+                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement  = {_epochs_since_last_improvement}",
                 end="\r",
             )
         if converged:
