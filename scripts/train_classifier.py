@@ -83,7 +83,7 @@ def main(args):
         label="train",
     )
     ax.plot(
-        torch.arange(loss_values_train.shape[0]).detach().numpy(),
+        torch.arange(loss_values_val.shape[0]).detach().numpy(),
         loss_values_val,
         label="val",
     )

@@ -61,7 +61,7 @@ def train(
     batch_size: int = 5000,
     resume_training: bool = False,
     ckp_path: str = None,
-    ckp_interval: int = 10,
+    ckp_interval: int = 50,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
@@ -121,20 +121,20 @@ def train(
     model.to(device)
 
     while epoch <= max_num_epochs:
+        train_loss_sum = 0.0
+        model.train()
         for theta_batch, x_batch, d_batch in train_loader:
-            model.train()
             optimizer.zero_grad()
 
             predictions = model(x_batch)
-            loss = criterion(predictions, d_batch, theta_batch).mean(dim=0)
+            batch_loss = criterion(predictions, d_batch, theta_batch).mean(dim=0)
+            train_loss_sum += batch_loss.sum().item()
 
-            with torch.no_grad():
-                _summary["training_losses"].append(loss.item())
-
-            loss.backward()
+            batch_loss.backward()
             optimizer.step()
 
         epoch += 1
+        _summary["training_losses"].append(train_loss_sum / int(th_train.shape[0]))
 
         # check validation performance
         model.eval()
