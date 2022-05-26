@@ -4,6 +4,7 @@ from os import path
 from typing import Callable, Dict
 from loss_calibration.loss import BCELoss_weighted
 from copy import deepcopy
+from torch.utils.data import DataLoader, TensorDataset
 
 
 class FeedforwardNN(nn.Module):
@@ -56,24 +57,24 @@ class FeedforwardNN(nn.Module):
         batch_size: int = 10000,
     ):
         d_train = (th_train > threshold).float()
-        # dataset = data.TensorDataset(th_train, x_train, d_train)
-        # train_loader = data.DataLoader(dataset, batch_size=batch_size)  # , shuffle=True)
+        dataset = TensorDataset(th_train, x_train, d_train)
+        train_loader = DataLoader(dataset, batch_size=batch_size)
 
         self.train()
 
         loss_values = []
         for epoch in range(epochs):
-            # for theta_batch, x_batch, d_batch in train_loader:
-            optimizer.zero_grad()
+            for theta_batch, x_batch, d_batch in train_loader:
+                optimizer.zero_grad()
 
-            predictions = self(x_train)
-            loss = criterion(predictions, d_train, th_train)  # ! requires gt theta
+                predictions = self(x_train)
+                loss = criterion(predictions, d_train, th_train)  # ! requires gt theta
 
-            with torch.no_grad():
-                loss_values.append(loss.item())
+                with torch.no_grad():
+                    loss_values.append(loss.item())
 
-            loss.backward()
-            optimizer.step()
+                loss.backward()
+                optimizer.step()
 
             if epoch % 100 == 0:
                 print(
@@ -121,10 +122,10 @@ def train(
     stop_after_epochs: int = 200,
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
-    batch_size: int = 10000,
+    batch_size: int = 5000,
     resume_training: bool = False,
     ckp_path: str = None,
-    ckp_interval: int = 500,
+    ckp_interval: int = 10,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
@@ -160,8 +161,8 @@ def train(
 
     d_train = (th_train > threshold).float()
     d_val = (th_val > threshold).float()
-    # dataset = data.TensorDataset(th_train, x_train, d_train)
-    # train_loader = data.DataLoader(dataset, batch_size=batch_size)  # , shuffle=True)
+    dataset = TensorDataset(th_train, x_train, d_train)
+    train_loader = DataLoader(dataset, batch_size=batch_size)  # , shuffle=True)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = BCELoss_weighted(costs, threshold)
@@ -184,19 +185,18 @@ def train(
     model.to(device)
 
     while epoch <= max_num_epochs:
-        # for epoch in range(start_epoch, max_num_epochs):
-        # for theta_batch, x_batch, d_batch in train_loader:
-        model.train()
-        optimizer.zero_grad()
+        for theta_batch, x_batch, d_batch in train_loader:
+            model.train()
+            optimizer.zero_grad()
 
-        predictions = model(x_train)
-        loss = criterion(predictions, d_train, th_train).mean(dim=0)
+            predictions = model(x_batch)
+            loss = criterion(predictions, d_batch, theta_batch).mean(dim=0)
 
-        with torch.no_grad():
-            _summary["training_losses"].append(loss.item())
+            with torch.no_grad():
+                _summary["training_losses"].append(loss.item())
 
-        loss.backward()
-        optimizer.step()
+            loss.backward()
+            optimizer.step()
 
         epoch += 1
 
@@ -240,12 +240,12 @@ def train(
 
         if (epoch + 1) % ckp_interval == 0:
             print(
-                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {loss.item():.8f}",
+                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {loss.item():.8f}\t last_improvement  = {_epochs_since_last_improvement}",
                 end="\r",
             )
         if converged:
             print(f"Converged after {epoch} epochs.")
-            # break
+            break
         elif max_num_epochs == epoch:
             print(
                 f"Maximum number of epochs `max_num_epochs={max_num_epochs}` reached,"
