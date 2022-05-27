@@ -50,9 +50,9 @@ class FeedforwardNN(nn.Module):
 def train(
     model: nn.Module,
     x_train: torch.Tensor,
-    th_train: torch.Tensor,
+    theta_train: torch.Tensor,
     x_val: torch.Tensor,
-    th_val: torch.Tensor,
+    theta_val: torch.Tensor,
     costs: list,
     threshold: float,
     stop_after_epochs: int = 50,
@@ -61,7 +61,7 @@ def train(
     batch_size: int = 5000,
     resume_training: bool = False,
     ckp_path: str = None,
-    ckp_interval: int = 50,
+    ckp_interval: int = 20,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
@@ -70,9 +70,9 @@ def train(
     Args:
         model (nn.Module): network instance to train
         x_train (torch.Tensor): training data - observations
-        th_train (torch.Tensor): training data - parameters
+        theta_train (torch.Tensor): training data - parameters
         x_val (torch.Tensor): validation data - observations
-        th_val (torch.Tensor): validation data - parameters
+        theta_val (torch.Tensor): validation data - parameters
         costs (list): costs of misclassification, for FN and FP
         threshold (float): threshold for binarized decisions
         stop_after_epochs (int, optional): Number of epochs to wait for improvement on the validation data before terminating training. Defaults to 20.
@@ -95,10 +95,15 @@ def train(
         training_losses=[],
     )
 
-    d_train = (th_train > threshold).float()
-    d_val = (th_val > threshold).float()
-    dataset = TensorDataset(th_train, x_train, d_train)
-    train_loader = DataLoader(dataset, batch_size=batch_size)  # , shuffle=True)
+    d_train = (theta_train > threshold).float()
+    d_val = (theta_val > threshold).float()
+
+    train_data = TensorDataset(
+        theta_train.to(device), x_train.to(device), d_train.to(device)
+    )
+    train_data = TensorDataset(theta_val.to(device), x_val.to(device), d_val.to(device))
+    train_loader = DataLoader(train_data, batch_size=batch_size)
+    val_loader = DataLoader(train_data, batch_size=min(batch_size, theta_val.shape[0]))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = BCELoss_weighted(costs, threshold)
@@ -128,22 +133,27 @@ def train(
 
             predictions = model(x_batch)
             batch_loss = criterion(predictions, d_batch, theta_batch).mean(dim=0)
-            train_loss_sum += batch_loss.sum().item()
+            train_loss_sum += batch_loss.item()
 
             batch_loss.backward()
             optimizer.step()
 
         epoch += 1
-        avg_train_loss = train_loss_sum / int(th_train.shape[0])
+        avg_train_loss = train_loss_sum / theta_train.shape[0]
         _summary["training_losses"].append(avg_train_loss)
 
         # check validation performance
         model.eval()
-        with torch.no_grad():
-            preds_val = model(x_val)
-            val_loss = criterion(preds_val, d_val, th_val).mean()
+        val_loss_sum = 0.0
 
-        _summary["validation_losses"].append(val_loss)
+        with torch.no_grad():
+            for theta_batch, x_batch, d_batch in val_loader:
+                preds_batch = model(x_batch)
+                val_batch_loss = criterion(preds_batch, d_batch, theta_batch).mean()
+                val_loss_sum += val_batch_loss.item()
+
+        avg_val_loss = val_loss_sum / theta_val.shape[0]
+        _summary["validation_losses"].append(avg_val_loss)
 
         (
             converged,
@@ -152,7 +162,7 @@ def train(
             _best_val_loss,
         ) = check_converged(
             model,
-            val_loss,
+            avg_val_loss,
             _best_val_loss,
             _best_model_state_dict,
             _epochs_since_last_improvement,
@@ -161,9 +171,9 @@ def train(
         )
 
         is_best = _epochs_since_last_improvement == 0
-        if (epoch + 1) % ckp_interval == 0 or is_best:
+        if epoch % ckp_interval == 0 or is_best:
             checkpoint = {
-                "epoch": epoch + 1,
+                "epoch": epoch,
                 "state_dict": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "training_losses": torch.as_tensor(_summary["training_losses"]),
@@ -175,9 +185,9 @@ def train(
 
             save_checkpoint(checkpoint, is_best, ckp_interval, model_dir)
 
-        if (epoch + 1) % ckp_interval == 0:
+        if epoch % ckp_interval == 0:
             print(
-                f"{epoch}\t val_loss = {val_loss.item():.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement  = {_epochs_since_last_improvement}",
+                f"{epoch}\t val_loss = {avg_val_loss.item():.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
                 end="\r",
             )
         if converged:
