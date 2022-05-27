@@ -101,9 +101,9 @@ def train(
     train_data = TensorDataset(
         theta_train.to(device), x_train.to(device), d_train.to(device)
     )
-    train_data = TensorDataset(theta_val.to(device), x_val.to(device), d_val.to(device))
+    val_data = TensorDataset(theta_val.to(device), x_val.to(device), d_val.to(device))
     train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_loader = DataLoader(train_data, batch_size=min(batch_size, theta_val.shape[0]))
+    val_loader = DataLoader(val_data, batch_size=min(batch_size, theta_val.shape[0]))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = BCELoss_weighted(costs, threshold)
