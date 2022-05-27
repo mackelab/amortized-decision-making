@@ -187,7 +187,7 @@ def train(
 
         if epoch % ckp_interval == 0:
             print(
-                f"{epoch}\t val_loss = {avg_val_loss.item():.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
+                f"{epoch}\t val_loss = {avg_val_loss:.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
                 end="\r",
             )
         if converged:
