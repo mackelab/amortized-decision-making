@@ -55,7 +55,7 @@ def train(
     theta_val: torch.Tensor,
     costs: list,
     threshold: float,
-    stop_after_epochs: int = 50,
+    stop_after_epochs: int = 20,
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
     batch_size: int = 5000,
