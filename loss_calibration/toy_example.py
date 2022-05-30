@@ -3,15 +3,13 @@ from torch.distributions import Normal
 from sbi.utils import BoxUniform
 from loss_calibration.loss import StepLoss_weighted
 
-prior = BoxUniform(
-    [0.0],
-    [
-        5.0,
-    ],
-)
+
+def sample_prior(n, low=0.0, high=5.0):
+    prior = BoxUniform([low], [high])
+    return prior.sample_n(n)
 
 
-def simulator(theta):
+def sample_simulator(theta):
     return 50 + 0.5 * theta * (5 - theta) ** 4 + 10 * torch.randn(theta.shape)
 
 
@@ -34,7 +32,7 @@ def evaluate_joint(theta, x):
 
 def normalize(values, lower, upper, resolution):
     sum_val = torch.sum(values)
-    return sum_val * (upper - lower) / resolution
+    return sum_val * (upper - lower) / (resolution - 1)
 
 
 def gt_posterior(x, lower=0.0, upper=5.0, resolution=500):
@@ -53,7 +51,7 @@ def evaluate_cost(thetas, costs=[5.0, 1.0], threshold=2.0):
     return loss_fn, loss_fp
 
 
-def exp_post_loss(
+def expected_posterior_loss(
     x_o, lower=0.0, upper=5.0, resolution=500, costs=[5.0, 1.0], threshold=2.0
 ):
     """Compute expected posterior loss
@@ -71,22 +69,30 @@ def exp_post_loss(
     """
     theta_grid = torch.linspace(lower, upper, resolution).unsqueeze(1)
     post = gt_posterior(x_o, lower, upper, resolution)
-    cost_fn, cost_fp = evaluate_cost(theta_grid, costs=costs, threshold=threshold)
+    cost_pred0, cost_pred1 = evaluate_cost(theta_grid, costs=costs, threshold=threshold)
     # expected posterior loss
-    loss_fn = (post * cost_fn * (upper - lower) / resolution).sum()
-    loss_fp = (post * cost_fp * (upper - lower) / resolution).sum()
-    return loss_fn, loss_fp
+    loss_pred0 = (
+        post * cost_pred0 * (upper - lower) / (resolution - 1)
+    ).sum()  # TODO: check
+    loss_pred1 = (
+        post * cost_pred1 * (upper - lower) / (resolution - 1)
+    ).sum()  # TODO: check
+    return loss_pred0, loss_pred1
 
 
 def prediction_gt_posterior(
     x_o, lower=0.0, upper=5.0, resolution=500, costs=[5.0, 1.0], threshold=2.0
 ):
-    loss_fn, loss_fp = exp_post_loss(x_o, lower, upper, resolution, costs, threshold)
-    return (loss_fn > loss_fp).float()
+    loss_pred0, loss_pred1 = expected_posterior_loss(
+        x_o, lower, upper, resolution, costs, threshold
+    )
+    return (loss_pred0 > loss_pred1).float()
 
 
 def posterior_ratio(
     x_o, lower=0.0, upper=5.0, resolution=500, costs=[5.0, 1.0], threshold=2.0
 ):
-    int_fn, int_fp = exp_post_loss(x_o, lower, upper, resolution, costs, threshold)
+    int_fn, int_fp = expected_posterior_loss(
+        x_o, lower, upper, resolution, costs, threshold
+    )
     return int_fn / (int_fp + int_fn)
