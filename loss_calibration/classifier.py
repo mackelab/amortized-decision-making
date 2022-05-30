@@ -132,8 +132,9 @@ def train(
             optimizer.zero_grad()
 
             predictions = model(x_batch)
-            batch_loss = criterion(predictions, d_batch, theta_batch)
-            train_loss_sum += batch_loss.sum(dim=0).item()
+            batch_loss = criterion(predictions, d_batch, theta_batch).sum(dim=0)
+
+            train_loss_sum += batch_loss.item()
 
             batch_loss.backward()
             optimizer.step()
@@ -149,8 +150,8 @@ def train(
         with torch.no_grad():
             for theta_batch, x_batch, d_batch in val_loader:
                 preds_batch = model(x_batch)
-                val_batch_loss = criterion(preds_batch, d_batch, theta_batch)
-                val_loss_sum += val_batch_loss.sum(dim=0).item()
+                val_batch_loss = criterion(preds_batch, d_batch, theta_batch).sum(dim=0)
+                val_loss_sum += val_batch_loss.item()
 
         avg_val_loss = val_loss_sum / theta_val.shape[0]
         _summary["validation_losses"].append(avg_val_loss)
