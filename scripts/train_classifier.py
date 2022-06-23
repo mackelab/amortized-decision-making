@@ -73,6 +73,7 @@ def main(args):
         learning_rate=learning_rate,
         max_num_epochs=epochs,
         model_dir=model_dir,
+        seed=args.seed,
     )
 
     # save trained classifier and metadata
