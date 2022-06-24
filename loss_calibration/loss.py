@@ -31,12 +31,8 @@ def StepLoss_weighted(weights, threshold):
         ], "decision has to be one of 0 (below threshold) or  1(above treshold)"
 
         return (
-            decision
-            * (1 - torch.gt(theta, threshold).type(torch.float))
-            * weights[1]  # * (1 + (threshold - theta))
-            + (1 - decision)
-            * torch.gt(theta, threshold).type(torch.float)
-            * weights[0]  # * (1 + (theta - threshold))
+            decision * (1 - torch.gt(theta, threshold).type(torch.float)) * weights[1]
+            + (1 - decision) * torch.gt(theta, threshold).type(torch.float) * weights[0]
         )
 
     return loss
