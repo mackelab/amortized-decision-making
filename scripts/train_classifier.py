@@ -1,6 +1,7 @@
 # script to train clasifier, pass arguments by argparse
 
 import argparse
+from typing import Optional
 from loss_calibration.classifier import FeedforwardNN, train
 import torch
 from datetime import datetime
@@ -25,6 +26,11 @@ def main(args):
         x_train = x_train[: args.ntrain]
     th_val = torch.load(path.join(args.data_dir, "th_val.pt"), map_location=device)
     x_val = torch.load(path.join(args.data_dir, "x_val.pt"), map_location=device)
+    if args.parameter >= 0 and args.parameter <= th_train.shape[1] - 1:
+        dim = args.parameter
+        print("Only use parameter {dim}.")
+        th_train = th_train[:, dim : dim + 1]
+        th_val = th_val[:, dim : dim + 1]
 
     threshold = args.T
     costs = args.costs
@@ -118,6 +124,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--T", type=float, default=2.0, help="Threshold for decision-making"
+    )
+    parser.add_argument(
+        "--parameter",
+        type=int,
+        default=-1,
+        help="parameter used for decision-making",
     )
     parser.add_argument(
         "--ntrain",
