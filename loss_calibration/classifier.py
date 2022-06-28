@@ -64,6 +64,7 @@ def train(
     ckp_interval: int = 20,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    seed=0,
 ):
     """train classifier until convergence
 
@@ -87,6 +88,11 @@ def train(
     Returns:
         Tuple[nn.Module, torch.Tensor]: trained classifier, training loss values
     """
+
+    assert (
+        theta_train.shape[1] == 1
+    ), "Only decisions based on one parameter implemented."
+    torch.manual_seed(seed)
 
     max_num_epochs = 2**31 - 1 if max_num_epochs is None else max_num_epochs
 
