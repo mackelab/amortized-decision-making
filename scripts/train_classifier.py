@@ -129,7 +129,7 @@ if __name__ == "__main__":
         "--parameter",
         type=int,
         default=-1,
-        help="parameter used for decision-making",
+        help="index of parameter used for decision-making",
     )
     parser.add_argument(
         "--ntrain",
