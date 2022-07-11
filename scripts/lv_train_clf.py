@@ -1,13 +1,7 @@
 import torch
-import sbibm
 from loss_calibration.classifier import FeedforwardNN, train
 from loss_calibration.utils import prepare_for_training, save_metadata
 from loss_calibration.lotka_volterra import load_data
-
-task = sbibm.get_task("lotka_volterra")
-prior = task.get_prior()
-simulator = task.get_simulator()
-
 
 # load data
 theta_train, x_train, theta_val, x_val, theta_test, x_test = load_data(
