@@ -2,11 +2,22 @@ import torch
 from loss_calibration.classifier import FeedforwardNN, train
 from loss_calibration.utils import prepare_for_training, save_metadata
 from loss_calibration.lotka_volterra import load_data
+from os import path
 
 # load data
-theta_train, x_train, theta_val, x_val, theta_test, x_test = load_data(
-    base_dir="../data/"
-)
+# theta_train, x_train, theta_val, x_val, theta_test, x_test = load_data(
+#     base_dir="../data/"
+# )
+
+import os
+
+path_lv = "../data/lotka_volterra"
+theta_train = torch.load(path.join(path_lv, "th_train.pt"))
+x_train = torch.load(path.join(path_lv, "x_train.pt"))
+theta_val = torch.load(path.join(path_lv, "th_val.pt"))
+x_val = torch.load(path.join(path_lv, "x_val.pt"))
+theta_test = torch.load(path.join(path_lv, "th_test.pt"))
+x_test = torch.load(path.join(path_lv, "x_test.pt"))
 
 
 # tresholds
@@ -28,6 +39,7 @@ thresholds = torch.cat(
 indexed_thresholds = list(
     zip(indices, list(torch.round(thresholds_alpha, decimals=2).numpy()))
 )
+print("Train with tresholds: ", indexed_thresholds)
 
 costs_list = [
     [1.0, 20.0],
@@ -44,7 +56,7 @@ costs = [20.0, 1.0]
 # for costs in costs_list:
 for (idx, T) in indexed_thresholds:
     print(idx, T)
-    base_dir = "../results/lotka_volterra/classifier_varying_T"
+    base_dir = "../results/lotka_volterra/varying_T"
     model_dir = prepare_for_training(base_dir, T, costs)
 
     seed = 0
