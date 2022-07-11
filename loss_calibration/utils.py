@@ -1,9 +1,14 @@
 from os import mkdir, path
 from datetime import datetime
 import torch
+import json
 
 
-def prepare_for_training(base_dir, threshold, costs):
+def prepare_for_training(
+    base_dir,
+    threshold,
+    costs,
+):
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
     model_dir = path.join(
         base_dir,
@@ -20,6 +25,20 @@ def prepare_filestructure(model_dir):
         print(f"Created directory {model_dir}.")
     except FileExistsError:
         print(f"Directory {model_dir} already exists.")
+
+
+def save_metadata(model_dir, input, hidden_layers, costs, T, seed, lr, ntrain):
+    metadata = {
+        "seed": seed,
+        "architecture": f"{input}-{'-'.join(map(str, hidden_layers))}-1",
+        "optimizer": "Adam",
+        "learning_rate": lr,
+        "Ntrain": ntrain,
+        "threshold": T,
+        "costs": costs,
+    }
+
+    json.dump(metadata, open(f"{model_dir}/metadata.json", "w"))
 
 
 def load_data(task_name, base_dir="./data"):
