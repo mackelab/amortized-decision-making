@@ -2,25 +2,28 @@
 
 import argparse
 from os import path
-from sbi.utils import BoxUniform
 import torch
+import loss_calibration.toy_example as toy
+import loss_calibration.lotka_volterra as lv
 
 torch.manual_seed(758)
 
 
 def main(args):
-    # define prior and simulator
-    prior = BoxUniform([0.0], [5.0])
-
-    def simulator(theta):
-        # return 5*theta + torch.randn(theta.shape) * 3
-        return (
-            50 + 0.5 * theta * (5 - theta) ** 4 + torch.randn(theta.shape) * 10
-        )  # * (theta+3)
-
+    task = args.task
     n_train = args.ntrain
     n_val = args.nval
     n_test = args.ntest
+
+    assert task in ["toy_example", "lotka_volterra"]
+
+    if task == "toy_example":
+        prior = toy.get_prior()
+        simulator = toy.get_simulator()
+
+    if task == "lotka_volterra":
+        prior = lv.get_prior()
+        simulator = lv.get_simulator()
 
     thetas = prior.sample((n_train + n_test + n_val,))
     observations = simulator(thetas)
@@ -29,20 +32,34 @@ def main(args):
     # decisions = (thetas > threshold).float()  # labels 0,1
 
     # save data
-    torch.save(thetas[:n_train], path.join(args.data_dir, "th_train.pt"))
-    torch.save(observations[:n_train], path.join(args.data_dir, "x_train.pt"))
-    torch.save(thetas[n_train : n_train + n_val], path.join(args.data_dir, "th_val.pt"))
+    torch.save(thetas[:n_train], path.join(args.data_dir, task, "theta_train.pt"))
+    torch.save(observations[:n_train], path.join(args.data_dir, task, "x_train.pt"))
     torch.save(
-        observations[n_train : n_train + n_val], path.join(args.data_dir, "x_val.pt")
+        thetas[n_train : n_train + n_val],
+        path.join(args.data_dir, task, "theta_val.pt"),
     )
-    torch.save(thetas[n_train + n_val :], path.join(args.data_dir, "th_test.pt"))
-    torch.save(observations[n_train + n_val :], path.join(args.data_dir, "x_test.pt"))
+    torch.save(
+        observations[n_train : n_train + n_val],
+        path.join(args.data_dir, task, "x_val.pt"),
+    )
+    torch.save(
+        thetas[n_train + n_val :], path.join(args.data_dir, task, "theta_test.pt")
+    )
+    torch.save(
+        observations[n_train + n_val :], path.join(args.data_dir, task, "x_test.pt")
+    )
 
-    print(f"Saved data to '{args.data_dir}'.")
+    print(f"Saved data to '{path.join(args.data_dir, task)}'.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a new data set")
+
+    parser.add_argument(
+        "--task",
+        type=str,
+        help="Task to generate data for. One of ['toy_example', 'lotka_volterra']",
+    )
 
     parser.add_argument(
         "--ntrain", type=int, default=500000, help="Number of training samples"
@@ -55,7 +72,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--data_dir",
-        default="../data/1d_classifier",
+        default="../data/",
         help="Directory to save the data set",
     )
 
