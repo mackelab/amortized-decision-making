@@ -28,9 +28,6 @@ def main(args):
     thetas = prior.sample((n_train + n_test + n_val,))
     observations = simulator(thetas)
 
-    # threshold = args.T
-    # decisions = (thetas > threshold).float()  # labels 0,1
-
     # save data
     torch.save(thetas[:n_train], path.join(args.data_dir, task, "theta_train.pt"))
     torch.save(observations[:n_train], path.join(args.data_dir, task, "x_train.pt"))

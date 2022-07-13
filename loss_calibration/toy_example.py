@@ -4,6 +4,14 @@ from sbi.utils import BoxUniform
 from loss_calibration.loss import StepLoss_weighted
 
 
+def get_prior(low=0.0, high=5.0):
+    return BoxUniform([low], [high])
+
+
+def get_simulator():
+    return sample_simulator
+
+
 def sample_prior(n, low=0.0, high=5.0):
     prior = BoxUniform([low], [high])
     return prior.sample_n(n)
