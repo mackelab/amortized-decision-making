@@ -50,6 +50,7 @@ def load_data(task_name, base_dir="./data"):
         x_val = torch.load(path.join(dir, "x_val.pt"))
         theta_test = torch.load(path.join(dir, "theta_test.pt"))
         x_test = torch.load(path.join(dir, "x_test.pt"))
+        print(f"Load data from '{dir}'.")
         return theta_train, x_train, theta_val, x_val, theta_test, x_test
     except FileNotFoundError:
         print("Data not found, check path or generate data first.")
@@ -73,3 +74,31 @@ def save_data(
     torch.save(theta_test, path.join(dir, "theta_test.pt"))
     torch.save(x_test, path.join(dir, "x_test.pt"))
     print(f"Saved training, test and vailadation data at: {dir}")
+
+
+def format_axis(ax, xhide=True, yhide=True, xlabel="", ylabel="", tickformatter=None):
+    for loc in ["right", "top", "left", "bottom"]:
+        ax.spines[loc].set_visible(False)
+    if xhide:
+        ax.set_xlabel("")
+        ax.xaxis.set_ticks_position("none")
+        ax.xaxis.set_tick_params(labelbottom=False)
+    if yhide:
+        ax.set_ylabel("")
+        ax.yaxis.set_ticks_position("none")
+        ax.yaxis.set_tick_params(labelleft=False)
+    if not xhide:
+        ax.set_xlabel(xlabel)
+        ax.xaxis.set_ticks_position("bottom")
+        ax.xaxis.set_tick_params(labelbottom=True)
+        if tickformatter is not None:
+            ax.xaxis.set_major_formatter(tickformatter)
+        ax.spines["bottom"].set_visible(True)
+    if not yhide:
+        ax.set_ylabel(ylabel)
+        ax.yaxis.set_ticks_position("left")
+        ax.yaxis.set_tick_params(labelleft=True)
+        if tickformatter is not None:
+            ax.yaxis.set_major_formatter(tickformatter)
+        ax.spines["left"].set_visible(True)
+    return ax
