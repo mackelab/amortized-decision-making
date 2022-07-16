@@ -6,7 +6,7 @@ from sbibm.algorithms.sbi.utils import (
 )
 import matplotlib.pyplot as plt
 from os import path
-from loss_calibration.utils import load_data as utils_load_data
+import loss_calibration.utils as utils
 
 _task = sbibm.get_task("sir")
 
@@ -21,6 +21,17 @@ def get_prior():
 
 def get_simulator():
     return _task.get_simulator()
+
+
+def posterior_ratio_given_obs(
+    n_obs: int,
+    idx_parameter: int,
+    threshold: float,
+    costs: list,
+):
+    return utils.posterior_ratio_given_obs(
+        _task, n_obs, idx_parameter, threshold, costs
+    )
 
 
 def plot_observations(rows=2, cols=5):
@@ -43,7 +54,7 @@ def plot_observations(rows=2, cols=5):
 
 
 def load_data(base_dir="./data"):
-    return utils_load_data(_task.name, base_dir)
+    return utils.load_data(_task.name, base_dir)
 
 
 def generate_data(

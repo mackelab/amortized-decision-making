@@ -1,3 +1,4 @@
+from concurrent.futures import thread
 import logging
 from typing import Optional
 import sbibm
@@ -8,7 +9,7 @@ from sbibm.algorithms.sbi.utils import (
 import torch
 import matplotlib.pyplot as plt
 from os import path
-from loss_calibration.utils import load_data as utils_load_data
+import loss_calibration.utils as utils
 
 _task = sbibm.get_task("lotka_volterra")
 
@@ -25,25 +26,15 @@ def get_simulator():
     return _task.get_simulator()
 
 
-def posterior_ratio_given_samples(
-    posterior_samples: torch.Tensor, treshold: float, costs: list
-):
-    cost_fn = (posterior_samples > treshold).sum() * costs[0]
-    cost_fp = (posterior_samples < treshold).sum() * costs[1]
-    return cost_fn / (cost_fn + cost_fp)
-
-
 def posterior_ratio_given_obs(
     n_obs: int,
     idx_parameter: int,
-    treshold: float,
+    threshold: float,
     costs: list,
 ):
-    assert n_obs in range(1, 11)
-    posterior_samples = _task.get_reference_posterior_samples(n_obs)[:, idx_parameter]
-    cost_fn = (posterior_samples > treshold).sum() * costs[0]
-    cost_fp = (posterior_samples < treshold).sum() * costs[1]
-    return cost_fn / (cost_fn + cost_fp)
+    return utils.posterior_ratio_given_obs(
+        _task, n_obs, idx_parameter, threshold, costs
+    )
 
 
 def plot_observations(rows=2, cols=5):
@@ -69,7 +60,7 @@ def plot_observations(rows=2, cols=5):
 
 
 def load_data(base_dir="./data"):
-    return utils_load_data(_task.name, base_dir)
+    return utils.load_data(_task.name, base_dir)
 
 
 def generate_data(
