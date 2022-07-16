@@ -4,6 +4,28 @@ import torch
 import json
 
 
+def posterior_ratio_given_samples(
+    posterior_samples: torch.Tensor, treshold: float, costs: list
+):
+    cost_fn = (posterior_samples > treshold).sum() * costs[0]
+    cost_fp = (posterior_samples < treshold).sum() * costs[1]
+    return cost_fn / (cost_fn + cost_fp)
+
+
+def posterior_ratio_given_obs(
+    task,
+    n_obs: int,
+    idx_parameter: int,
+    threshold: float,
+    costs: list,
+):
+    assert n_obs in range(1, 11)
+    posterior_samples = task.get_reference_posterior_samples(n_obs)[:, idx_parameter]
+    cost_fn = (posterior_samples > threshold).sum() * costs[0]
+    cost_fp = (posterior_samples < threshold).sum() * costs[1]
+    return cost_fn / (cost_fn + cost_fp)
+
+
 def prepare_for_training(
     base_dir,
     threshold,
