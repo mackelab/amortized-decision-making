@@ -65,7 +65,7 @@ def train_npe(
     ).train(
         num_atoms=num_atoms,
         training_batch_size=training_batch_size,
-        retrain_from_scratch_each_round=False,
+        retrain_from_scratch=False,
         discard_prior_samples=False,
         use_combined_loss=False,
         show_train_summary=True,
