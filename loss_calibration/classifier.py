@@ -1,15 +1,24 @@
 import torch
 from torch import nn
 from os import path
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple, Iterable, Union, Optional
 from loss_calibration.loss import BCELoss_weighted
 from copy import deepcopy
 from torch.utils.data import DataLoader, TensorDataset
 
+from sbi.utils.sbiutils import Standardize
+
 
 class FeedforwardNN(nn.Module):
     def __init__(
-        self, input_dim: int = 1, hidden_dims: list = [5], output_dim: int = 1
+        self,
+        input_dim: int,
+        hidden_dims: Iterable,
+        output_dim: int,
+        activation: Callable = nn.Sigmoid(),
+        mean: Union[torch.Tensor, float] = None,
+        std: Union[torch.Tensor, float] = None,
+        z_scoring: Optional[str] = "Independent",
     ):
         """initialize the neural network
 
@@ -18,33 +27,256 @@ class FeedforwardNN(nn.Module):
             hidden_dims (list): list of dimensions of hidden layers
             output_dim (int): dimensionality of the network output
         """
-        assert len(hidden_dims) >= 1, "Specify at least one hidden layer."
+        if len(hidden_dims) == 0:
+            raise ValueError(
+                "Specify at least one hidden layer, list of hidden dims can't be empty."
+            )
+
+        if z_scoring.capitalize() in ["Independent", "Structured"]:
+            assert (
+                mean is not None and std is not None
+            ), "Provide mean and standard deviation for z_scoring."
+            z_scoring_bool = True
+        elif z_scoring.capitalize() == "None":
+            z_scoring_bool = False
+        else:
+            raise ValueError(
+                "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
+            )
+
         super(FeedforwardNN, self).__init__()
 
+        self.in_dim = input_dim
+        self.hidden_dims = hidden_dims
+        self.out_dim = output_dim
+        self.z_scored = z_scoring_bool
+
         # Layer
+        if z_scoring_bool:
+            self.standardize_layer = Standardize(mean, std)
         self.input_layer = nn.Linear(input_dim, hidden_dims[0])
-        self.hidden_layers = []
-        if len(hidden_dims) > 1:
-            for l in range(1, len(hidden_dims)):
-                self.hidden_layers.append(nn.Linear(hidden_dims[l - 1], hidden_dims[l]))
-                input_dim = hidden_dims[l]
-            self.hidden_layers = nn.ModuleList(self.hidden_layers)
+        self.hidden_layers = nn.ModuleList(
+            [
+                nn.Linear(in_dim, out_dim)
+                for in_dim, out_dim in zip(hidden_dims[:-1], hidden_dims[1:])
+            ]
+        )
         self.final_layer = nn.Linear(hidden_dims[-1], output_dim)
 
         # Activation function
-        self.sigmoid = nn.Sigmoid()
+        self.activation = activation
 
     def forward(self, x: torch.Tensor):
+        if x.shape[1] != self.in_dim:
+            raise ValueError(
+                "Expected inputs of dim {}, got {}.".format(self._in_dim, x.shape[1])
+            )
+        if self.z_scored:
+            x = self.standardize_layer(x)
         out = self.input_layer(x)
-        out = self.sigmoid(out)
+        out = self.activation(out)
 
         for layer in self.hidden_layers:
             out = layer(out)
-            out = self.sigmoid(out)
+            # out = nn.BatchNorm1d(out)
+            out = self.activation(out)
 
         out = self.final_layer(out)
-        out = self.sigmoid(out)  # output probability of belonging to class 0
+        out = self.activation(out)  # output probability of belonging to class 0
         return out
+
+
+# implementation adapted from nflows/resnet.py
+class ResNet(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Iterable,
+        output_dim: int,
+        context=None,
+        num_blocks=2,
+        activation: Callable = nn.Sigmoid(),
+        dropout_prob=0.0,
+        use_batch_norm=False,
+        mean: Union[torch.Tensor, float] = None,
+        std: Union[torch.Tensor, float] = None,
+        z_scoring: Optional[str] = "Independent",
+    ):
+
+        if len(hidden_dims) == 0:
+            raise ValueError(
+                "Specify at least one hidden layer, list of hidden dims can't be empty."
+            )
+
+        if z_scoring.capitalize() in ["Independent", "Structured"]:
+            assert (
+                mean is not None and std is not None
+            ), "Provide mean and standard deviation for z_scoring."
+            z_scoring_bool = True
+        elif z_scoring.capitalize() == "None":
+            z_scoring_bool = False
+        else:
+            raise ValueError(
+                "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
+            )
+
+        super().__init__()
+        self.hidden_dims = hidden_dims
+        self.context = context
+        self.z_scored = z_scoring_bool
+        if z_scoring_bool:
+            self.standardize_layer = Standardize(mean, std)
+        if context is not None:
+            self.initial_layer = nn.Linear(input_dim + context, hidden_dims[0])
+        else:
+            self.initial_layer = nn.Linear(input_dim, hidden_dims[0])
+        self.blocks = nn.ModuleList(
+            [
+                ResidualBlock(
+                    features=hidden_dims,
+                    context=context,
+                    activation=activation,
+                    dropout_prob=dropout_prob,
+                    use_batch_norm=use_batch_norm,
+                )
+                for _ in range(num_blocks)
+            ]
+        )
+        self.final_layer = nn.Linear(hidden_dims[-1], output_dim)
+
+    def forward():
+        pass
+
+    def forward(self, x, context=None):
+        if self.z_scored:
+            x = self.standardize_layer(x)
+        if context is None:
+            out = self.initial_layer(x)
+        else:
+            out = self.initial_layer(torch.cat((x, context), dim=1))
+        for block in self.blocks:
+            out = block(out, context=context)
+        out = self.final_layer(out)
+        return out
+
+
+class ResidualBlock(nn.Module):
+    def __init__(
+        self,
+        features,
+        context,
+        activation=nn.Sigmoid(),
+        dropout_prob=0.0,
+        use_batch_norm=False,
+        zero_init=True,
+    ):
+        super().__init__()
+        self.activation = activation
+
+        self.use_batch_norm = use_batch_norm
+        if use_batch_norm:
+            self.batch_norm_layers = nn.ModuleList(
+                [
+                    nn.BatchNorm1d(f, eps=1e-3) for f in features
+                ]  # fixed to 2: for _ in range(2)
+            )
+        if context is not None:
+            self.context_layer = nn.Linear(context, features)
+        self.linear_layers = nn.ModuleList(
+            [
+                nn.Linear(f1, f2) for f1, f2 in zip(features[:-1], features[1:])
+            ]  # fixed to 2: for _ in range(2)
+        )
+        self.dropout = nn.Dropout(p=dropout_prob)
+        if zero_init:
+            nn.init.uniform_(self.linear_layers[-1].weight, -1e-3, 1e-3)
+            nn.init.uniform_(self.linear_layers[-1].bias, -1e-3, 1e-3)
+
+    def forward(self, x, context=None):
+        n_layers = len(self.linear_layers)
+        res = x
+        if self.use_batch_norm:
+            res = self.batch_norm_layers[0](res)  #! assumes fixed 2 hidden layers
+        res = self.activation(res)
+        res = self.linear_layers[0](res)  #! assumes fixed 2 hidden layers
+        for l in range(1, n_layers):
+            if self.use_batch_norm:
+                res = self.batch_norm_layers[l](res)
+                res = self.activation(res)
+                if l == n_layers - 1:
+                    res = self.dropout(res)
+                res = self.linear_layers[l](res)
+        if context is not None:
+            res = nn.functional.glu(
+                torch.cat((res, self.context_layer(context)), dim=1), dim=1
+            )
+        return x + res
+
+
+def get_mean_and_std(z_scoring: str, x_train: torch.Tensor, min_std: float = 1e-14):
+    assert z_scoring.capitalize() in ["None", "Independent", "Structured"]
+    if z_scoring == "Independent":
+        std = x_train.std(dim=0)
+        std[std < min_std] = min_std
+        return x_train.mean(dim=0), std
+    elif z_scoring == "Structured":
+        std = x_train.std()
+        std[std < min_std] = min_std
+        return x_train.mean(), std
+    else:
+        return torch.zeros(1), torch.ones(1)
+
+
+def build_classifier(
+    model: str,
+    # input_dim: int,
+    x_train: torch.Tensor,
+    hidden_dims: Iterable,
+    output_dim: int,
+    context=None,
+    num_blocks=2,
+    activation: Callable = nn.Sigmoid(),
+    dropout_prob=0.0,
+    use_batch_norm=False,
+    z_scoring: Optional[str] = "Independent",
+):
+    # check z_scoring
+    if z_scoring.capitalize() in ["None", "Independent", "Structured"]:
+        mean, std = get_mean_and_std(z_scoring, x_train)
+    else:
+        raise ValueError(
+            "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
+        )
+
+    input_dim = x_train.shape[1]
+
+    if model == "fc":
+        clf = FeedforwardNN(
+            input_dim,
+            hidden_dims,
+            output_dim,
+            activation,
+            mean,
+            std,
+            z_scoring.capitalize(),
+        )
+    elif model == "resnet":
+        clf = ResNet(
+            input_dim,
+            hidden_dims,
+            output_dim,
+            context,
+            num_blocks,
+            activation,
+            dropout_prob,
+            use_batch_norm,
+            mean,
+            std,
+            z_scoring.capitalize(),
+        )
+    else:
+        raise NotImplementedError
+    return clf
 
 
 def train(
@@ -65,7 +297,7 @@ def train(
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     seed=0,
-):
+) -> Tuple[nn.Module, torch.Tensor, torch.Tensor]:
     """train classifier until convergence
 
     Args:
