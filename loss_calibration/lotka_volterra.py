@@ -37,7 +37,7 @@ def posterior_ratio_given_obs(
     )
 
 
-def plot_observations(rows=2, cols=5):
+def plot_observations(rows=2, cols=5, save=False):
     # TODO: placement of legend
     n_observations = 10
     fig, axes = plt.subplots(
@@ -56,7 +56,7 @@ def plot_observations(rows=2, cols=5):
         )
     axes[0, 0].legend()
     fig.suptitle("observations")
-    plt.show()
+    return fig, axes
 
 
 def load_data(base_dir="./data"):
