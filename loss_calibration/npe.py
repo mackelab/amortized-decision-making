@@ -21,8 +21,8 @@ def train_npe(
     training_batch_size: int = 10000,
     num_atoms: int = 10,
     automatic_transforms_enabled: bool = False,
-    z_score_x: bool = True,
-    z_score_theta: bool = True,
+    z_score_x: Optional[str] = "independent",
+    z_score_theta: Optional[str] = "independent",
     max_num_epochs: Optional[int] = None,
 ):
     assert not (num_observation is None and observation is None)
