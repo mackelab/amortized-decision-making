@@ -58,11 +58,9 @@ def train_npe(
         hidden_features=hidden_features,
         z_score_x=z_score_x,
         z_score_theta=z_score_theta,
-    )
-
-    inference_method = inference.SNPE_C(
-        prior, density_estimator=density_estimator_fun
     ).to(device)
+
+    inference_method = inference.SNPE_C(prior, density_estimator=density_estimator_fun)
     proposal = prior
 
     # Train for one round
