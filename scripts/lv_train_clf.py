@@ -1,24 +1,5 @@
 import torch
-from loss_calibration.classifier import FeedforwardNN, train
-from loss_calibration.utils import prepare_for_training, save_metadata
-from loss_calibration.lotka_volterra import load_data
-from os import path
-
-# load data
-# theta_train, x_train, theta_val, x_val, theta_test, x_test = load_data(
-#     base_dir="../data/"
-# )
-
 import os
-
-path_lv = "../data/lotka_volterra"
-theta_train = torch.load(path.join(path_lv, "th_train.pt"))
-x_train = torch.load(path.join(path_lv, "x_train.pt"))
-theta_val = torch.load(path.join(path_lv, "th_val.pt"))
-x_val = torch.load(path.join(path_lv, "x_val.pt"))
-theta_test = torch.load(path.join(path_lv, "th_test.pt"))
-x_test = torch.load(path.join(path_lv, "x_test.pt"))
-
 
 # tresholds
 labels = ["alpha", "beta", "gamma", "delta"]
@@ -56,38 +37,6 @@ costs = [20.0, 1.0]
 # for costs in costs_list:
 for (idx, T) in indexed_thresholds:
     print(idx, T)
-    base_dir = "../results/lotka_volterra/varying_T"
-    model_dir = prepare_for_training(base_dir, T, costs)
-
-    seed = 0
-    lr = 0.001
-    input_dim = 20
-    hidden_dims = [100, 100, 100]
-    save_metadata(
-        model_dir,
-        input_dim,
-        hidden_dims,
-        costs,
-        float(T),
-        seed,
-        lr,
-        x_train.shape[0],
-    )
-
-    print("start training")
-    clf = FeedforwardNN(input_dim, hidden_dims, 1)
-
-    clf, loss_values_train, loss_values_val = train(
-        clf,
-        x_train,
-        theta_train[:, idx : idx + 1],
-        x_val,
-        theta_val[:, idx : idx + 1],
-        costs,
-        T,
-        learning_rate=lr,
-        max_num_epochs=5000,
-        stop_after_epochs=100,
-        model_dir=model_dir,
-        seed=seed,
+    os.system(
+        f"python train_classifier.py  --task lotka_volterra --costs {','.join(str(c) for c in costs)} --T {T} --parameter {idx} --ntrain 100_000 --res_dir ../res/"
     )
