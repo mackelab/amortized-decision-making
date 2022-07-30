@@ -3,7 +3,7 @@ from os import path
 
 import torch
 from loss_calibration.npe import train_npe
-from loss_calibration.utils import check_base_dir_exists
+from loss_calibration.utils import check_base_dir_exists, load_data
 
 
 def main(args):
@@ -25,26 +25,25 @@ def main(args):
 
     ntrain = args.ntrain
     epochs = args.epochs
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data_dir = path.join(args.data_dir, task_name)
-    theta_train = torch.load(path.join(data_dir, "theta_train.pt"))
-    x_train = torch.load(path.join(data_dir, "x_train.pt"))
+    theta_train, x_train, _, _, _, _ = load_data(task_name, args.data_dir, device)
     if ntrain > theta_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
     elif ntrain < theta_train.shape[0]:
         theta_train = theta_train[:ntrain]
         x_train = x_train[:ntrain]
 
-    base_dir = path.join(args.save_dir, f"{task_name}/npe/")
-    check_base_dir_exists(base_dir)
+    save_dir = path.join(args.res_dir, f"{task_name}/npe/")
+    check_base_dir_exists(save_dir)
 
     print(
-        f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata_dir: {data_dir}\nsave_dir: ./results/{task_name}\n"
+        f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(args.data_dir, task_name)}\nsave at: {save_dir}\n"
     )
 
     npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=epochs)
-    torch.save(npe_posterior, path.join(base_dir, f"{estimator}_n{ntrain}.pt"))
-    print(f"Saved NPE at {base_dir}.")
+    torch.save(npe_posterior, path.join(save_dir, f"{estimator}_n{ntrain}.pt"))
+    print(f"Saved NPE at {save_dir}.")
 
 
 if __name__ == "__main__":

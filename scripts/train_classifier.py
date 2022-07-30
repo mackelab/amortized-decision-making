@@ -1,12 +1,12 @@
 # script to train clasifier, pass arguments by argparse
 
 import argparse
-from typing import Optional
-from loss_calibration.classifier import build_classifier, train
-from loss_calibration.utils import prepare_for_training, save_metadata
-import torch
 from os import path
+
 import matplotlib.pyplot as plt
+import torch
+from loss_calibration.classifier import build_classifier, train
+from loss_calibration.utils import load_data, prepare_for_training, save_metadata
 
 
 def main(args):
@@ -33,22 +33,21 @@ def main(args):
 
     # load data
     data_dir = path.join(args.data_dir, task_name)
-    th_train = torch.load(path.join(data_dir, "theta_train.pt"), map_location=device)
-    x_train = torch.load(path.join(data_dir, "x_train.pt"), map_location=device)
+    theta_train, x_train, theta_val, x_val, _, _ = load_data(
+        task_name, args.data_dir, device
+    )
     ntrain = args.ntrain
-    if ntrain > th_train.shape[0]:
+    if ntrain > theta_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
-    elif ntrain < th_train.shape[0]:
-        th_train = th_train[:ntrain]
+    elif ntrain < theta_train.shape[0]:
+        theta_train = theta_train[:ntrain]
         x_train = x_train[:ntrain]
-    th_val = torch.load(path.join(data_dir, "theta_val.pt"), map_location=device)
-    x_val = torch.load(path.join(data_dir, "x_val.pt"), map_location=device)
 
-    if args.parameter >= 0 and args.parameter <= th_train.shape[1] - 1:
+    if args.parameter >= 0 and args.parameter <= theta_train.shape[1] - 1:
         dim = args.parameter
         print("Restrict parameters to parameter {dim}.")
-        th_train = th_train[:, dim : dim + 1]
-        th_val = th_val[:, dim : dim + 1]
+        theta_train = theta_train[:, dim : dim + 1]
+        theta_val = theta_val[:, dim : dim + 1]
 
     threshold = args.T
     costs = args.costs
@@ -82,9 +81,9 @@ def main(args):
     clf, loss_values_train, loss_values_val = train(
         clf,
         x_train,
-        th_train,
+        theta_train,
         x_val,
-        th_val,
+        theta_val,
         costs,
         threshold,
         learning_rate=learning_rate,
@@ -143,9 +142,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--costs",
         type=lambda s: [float(item) for item in s.split(",")],
+        required=True,
         help="List specifying the cost of misclassification",
     )
-    parser.add_argument("--T", type=float, help="Threshold for decision making")
+    parser.add_argument(
+        "--T", type=float, required=True, help="Threshold for decision making"
+    )
     parser.add_argument(
         "--parameter",
         type=int,
