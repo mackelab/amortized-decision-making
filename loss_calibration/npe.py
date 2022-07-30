@@ -1,32 +1,33 @@
 import logging
-import torch
 from typing import Optional
-from sbibm.algorithms.sbi.utils import (
-    wrap_posterior,
-    wrap_prior_dist,
-)
+
+import sbibm
+import torch
 from sbi import inference as inference
 from sbi.utils.get_nn_models import posterior_nn
+from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
+
+import loss_calibration.toy_example as toy
 
 
 def train_npe(
-    task,
+    task_name: str,
     theta_train: torch.Tensor,
     x_train: torch.Tensor,
-    num_observation: Optional[int] = None,
-    observation: Optional[torch.Tensor] = None,
     neural_net: str = "nsf",
     hidden_features: int = 50,
     simulation_batch_size: int = 1000,
     training_batch_size: int = 10000,
     num_atoms: int = 10,
     automatic_transforms_enabled: bool = False,
-    z_score_x: bool = True,
-    z_score_theta: bool = True,
-    max_num_epochs: Optional[int] = None,
+    z_score_x: Optional[str] = "independent",
+    z_score_theta: Optional[str] = "independent",
+    max_num_epochs: Optional[int] = 2**31 - 1,
 ):
-    assert not (num_observation is None and observation is None)
-    assert not (num_observation is not None and observation is not None)
+
+    assert (
+        task_name in ["toy_example"] + sbibm.get_available_tasks()
+    ), "Task has to be available in sbibm or 'toy_example'."
     log = logging.getLogger(__name__)
     log.info(f"Running NPE")
 
@@ -40,14 +41,16 @@ def train_npe(
         training_batch_size = num_simulations
         log.warn("Reduced training_batch_size to num_simulations")
 
-    prior = task.get_prior_dist()
-    if observation is None:
-        observation = task.get_observation(num_observation)
+    if task_name == "toy_example":
+        prior = toy.get_prior()
+    else:
+        task = sbibm.get_task(task_name)
+        prior = task.get_prior_dist()
 
-    transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+        transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
 
-    if automatic_transforms_enabled:
-        prior = wrap_prior_dist(prior, transforms)
+        if automatic_transforms_enabled:
+            prior = wrap_prior_dist(prior, transforms)
 
     density_estimator_fun = posterior_nn(
         model=neural_net.lower(),
@@ -65,7 +68,7 @@ def train_npe(
     ).train(
         num_atoms=num_atoms,
         training_batch_size=training_batch_size,
-        retrain_from_scratch_each_round=False,
+        retrain_from_scratch=False,
         discard_prior_samples=False,
         use_combined_loss=False,
         show_train_summary=True,
@@ -73,6 +76,7 @@ def train_npe(
     )
     posterior = inference_method.build_posterior(density_estimator)
 
-    posterior_wrapped = wrap_posterior(posterior, transforms)
+    if task_name != "toy_example":
+        posterior_wrapped = wrap_posterior(posterior, transforms)
 
     return posterior  # , posterior_wrapped

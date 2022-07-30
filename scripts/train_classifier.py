@@ -1,88 +1,98 @@
 # script to train clasifier, pass arguments by argparse
 
 import argparse
-from typing import Optional
-from loss_calibration.classifier import FeedforwardNN, train
-import torch
-from datetime import datetime
-from os import device_encoding, path, mkdir
-import matplotlib as mpl
+from os import path
+
 import matplotlib.pyplot as plt
-import csv
-import json
+import torch
+from loss_calibration.classifier import build_classifier, train
+from loss_calibration.utils import load_data, prepare_for_training, save_metadata
 
 
 def main(args):
-    torch.manual_seed(args.seed)
+    assert path.isdir(args.data_dir), "data_dir is no existing directory"
+    assert path.isdir(args.res_dir), "res_dir is no existing directory"
+
+    task_name = args.task
+    assert task_name in [
+        "toy_example",
+        "sir",
+        "lotka_volterra",
+    ], "Choose one of 'toy_example', 'sir' or 'lotka_volterra'."
+
+    model = args.model
+    assert model in [
+        "fc",
+        "resnet",
+    ], "Model type should be one of 'fc' or 'resnet'."
+
+    seed = args.seed
+    torch.manual_seed(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # load data
-    th_train = torch.load(path.join(args.data_dir, "th_train.pt"), map_location=device)
-    x_train = torch.load(path.join(args.data_dir, "x_train.pt"), map_location=device)
-    if args.ntrain > th_train.shape[0]:
+    data_dir = path.join(args.data_dir, task_name)
+    theta_train, x_train, theta_val, x_val, _, _ = load_data(
+        task_name, args.data_dir, device
+    )
+    ntrain = args.ntrain
+    if ntrain > theta_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
-    elif args.ntrain < th_train.shape[0]:
-        th_train = th_train[: args.ntrain]
-        x_train = x_train[: args.ntrain]
-    th_val = torch.load(path.join(args.data_dir, "th_val.pt"), map_location=device)
-    x_val = torch.load(path.join(args.data_dir, "x_val.pt"), map_location=device)
-    if args.parameter >= 0 and args.parameter <= th_train.shape[1] - 1:
+    elif ntrain < theta_train.shape[0]:
+        theta_train = theta_train[:ntrain]
+        x_train = x_train[:ntrain]
+
+    if args.parameter >= 0 and args.parameter <= theta_train.shape[1] - 1:
         dim = args.parameter
-        print("Only use parameter {dim}.")
-        th_train = th_train[:, dim : dim + 1]
-        th_val = th_val[:, dim : dim + 1]
+        print(f"Restrict parameters to parameter {dim}.")
+        theta_train = theta_train[:, dim : dim + 1]
+        theta_val = theta_val[:, dim : dim + 1]
 
     threshold = args.T
     costs = args.costs
     hidden_layers = args.hidden
     learning_rate = args.lr
+    epochs = args.epochs
 
     # create directory & save metadata
-    timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
-    model_dir = path.join(
-        args.save_dir, f"{timestamp}_t{int(threshold)}_c{int(costs[0])}_{int(costs[1])}"
+    save_dir = path.join(args.res_dir, task_name, "classifier")
+    model_dir = prepare_for_training(save_dir, round(threshold, ndigits=4), costs)
+    save_metadata(
+        model_dir,
+        model=model,
+        input=x_train.shape[1],
+        hidden_layers=hidden_layers,
+        costs=costs,
+        T=(args.parameter, threshold),
+        seed=seed,
+        lr=learning_rate,
+        ntrain=ntrain,
     )
-    try:
-        mkdir(model_dir)
-        mkdir(path.join(model_dir, "checkpoints/"))
-        print(f"Directory {model_dir} created.")
-    except FileExistsError:
-        print(f"Directory {model_dir} already exists.")
-    metadata = {
-        "seed": args.seed,
-        "architecture": f"1-{'-'.join(map(str, hidden_layers))}-1",
-        "optimizer": "Adam",
-        "learning_rate": learning_rate,
-        "Ntrain": th_train.shape[0],
-        "threshold": threshold,
-        "costs": costs,
-    }
-    json.dump(metadata, open(f"{model_dir}/metadata.json", "w"))
 
     # training
     print(
-        f"Training specification:\nseed: {args.seed}\nepochs: {args.epochs}\nlearning rate: {args.lr}\ncosts: {args.costs}\nthreshold: {args.T}\
-            \nntrain: {args.ntrain}\ndata_dir: {args.data_dir}\nsave_dir: {args.save_dir}\ndevice: {device}"
+        f"Training specification:\ntask: {task_name}\nmodel: {model}\nseed: {seed}\nmax epochs: {epochs}\nlearning rate: {learning_rate}\ncosts: {costs}\nthreshold: {threshold}\
+            \nntrain: {ntrain}\ndata at: {data_dir}\nsave at: {save_dir}\ndevice: {device}"
     )
-    clf = FeedforwardNN(1, hidden_layers, 1)
 
-    epochs = args.epochs
+    clf = build_classifier(model, x_train, hidden_layers, 1)
 
     clf, loss_values_train, loss_values_val = train(
         clf,
         x_train,
-        th_train,
+        theta_train,
         x_val,
-        th_val,
+        theta_val,
         costs,
         threshold,
         learning_rate=learning_rate,
         max_num_epochs=epochs,
         model_dir=model_dir,
-        seed=args.seed,
+        seed=seed,
     )
 
-    # save trained classifier and metadata
+    # plot loss curve
     fig, ax = plt.subplots(1, 1)
     ax.plot(
         torch.arange(loss_values_train.shape[0]).detach().numpy(),
@@ -98,15 +108,28 @@ def main(args):
     ax.set_ylabel("loss")
     ax.set_xlabel("epochs")
     ax.legend()
-    fig.savefig(path.join(model_dir, f"{timestamp}_loss.pdf"))
+    fig.savefig(path.join(model_dir, f"loss_curve.pdf"))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training the classifier")
 
     parser.add_argument(
+        "--task",
+        type=str,
+        help="sbibm task name or 'toy_example'",
+    )
+
+    parser.add_argument(
         "--seed", type=int, default=0, help="Set seed for reproducibility."
     )
+
+    parser.add_argument(
+        "--model",
+        default="fc",
+        help="Model type, one of 'fc', 'resnet'.",
+    )
+
     parser.add_argument(
         "--hidden",
         type=lambda s: [int(item) for item in s.split(",")],
@@ -119,11 +142,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--costs",
         type=lambda s: [float(item) for item in s.split(",")],
-        default=[5.0, 1.0],
+        required=True,
         help="List specifying the cost of misclassification",
     )
     parser.add_argument(
-        "--T", type=float, default=2.0, help="Threshold for decision-making"
+        "--T", type=float, required=True, help="Threshold for decision making"
     )
     parser.add_argument(
         "--parameter",
@@ -137,15 +160,16 @@ if __name__ == "__main__":
         default=500000,
         help="Number of training samples",
     )
+
     parser.add_argument(
         "--data_dir",
-        default="../data/1d_classifier/",
-        help="Path to training data",
+        default="../data/",
+        help="Base directory of training data",
     )
     parser.add_argument(
-        "--save_dir",
-        default="../results/1d_classifier/",
-        help="Output directory for trained model",
+        "--res_dir",
+        default="../results/",
+        help="Base directory for saving",
     )
 
     args = parser.parse_args()
