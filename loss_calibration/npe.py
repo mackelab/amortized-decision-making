@@ -1,16 +1,21 @@
 import logging
 import torch
 from typing import Optional
+import sbibm
 from sbibm.algorithms.sbi.utils import (
     wrap_posterior,
     wrap_prior_dist,
 )
 from sbi import inference as inference
 from sbi.utils.get_nn_models import posterior_nn
+import loss_calibration.toy_example as toy
+from loss_calibration.utils import prepare_for_npe_training, save_npe_metadata
+from os import path
+import argparse
 
 
 def train_npe(
-    task,
+    task_name: str,
     theta_train: torch.Tensor,
     x_train: torch.Tensor,
     num_observation: Optional[int] = None,
@@ -23,10 +28,14 @@ def train_npe(
     automatic_transforms_enabled: bool = False,
     z_score_x: Optional[str] = "independent",
     z_score_theta: Optional[str] = "independent",
-    max_num_epochs: Optional[int] = None,
+    max_num_epochs: Optional[int] = 2**31 - 1,
 ):
-    assert not (num_observation is None and observation is None)
-    assert not (num_observation is not None and observation is not None)
+    # assert not (num_observation is None and observation is None)
+    # assert not (num_observation is not None and observation is not None)
+
+    assert (
+        task_name in ["toy_example"] + sbibm.get_available_tasks()
+    ), "Task has to be available in sbibm or 'toy_example'."
     log = logging.getLogger(__name__)
     log.info(f"Running NPE")
 
@@ -40,14 +49,18 @@ def train_npe(
         training_batch_size = num_simulations
         log.warn("Reduced training_batch_size to num_simulations")
 
-    prior = task.get_prior_dist()
-    if observation is None:
-        observation = task.get_observation(num_observation)
+    if task_name == "toy_example":
+        prior = toy.get_prior()
+    else:
+        task = sbibm.get_task(task_name)
+        prior = task.get_prior_dist()
+        # if observation is None:
+        #     observation = task.get_observation(num_observation)
 
-    transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+        transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
 
-    if automatic_transforms_enabled:
-        prior = wrap_prior_dist(prior, transforms)
+        if automatic_transforms_enabled:
+            prior = wrap_prior_dist(prior, transforms)
 
     density_estimator_fun = posterior_nn(
         model=neural_net.lower(),
@@ -73,6 +86,73 @@ def train_npe(
     )
     posterior = inference_method.build_posterior(density_estimator)
 
-    posterior_wrapped = wrap_posterior(posterior, transforms)
+    if task_name != "toy_example":
+        posterior_wrapped = wrap_posterior(posterior, transforms)
 
     return posterior  # , posterior_wrapped
+
+
+def main(args):
+    estimator = args.estimator
+    assert estimator in [
+        "nsf",
+        "maf",
+    ], "Density estimator has to be either 'nsf' or 'maf'."
+
+    task_name = args.task
+    assert task_name in [
+        "toy_example",
+        "sir",
+        "lotka_volterra",
+    ], "Choose one of 'toy_example', 'sir' or 'lotka_volterra'."
+
+    ntrain = args.ntrain
+
+    data_dir = path.join("../data/", task_name)
+    theta_train = torch.load(path.join(data_dir, "theta_train.pt"))
+    x_train = torch.load(path.join(data_dir, "x_train.pt"))
+    if ntrain > theta_train.shape[0]:
+        raise ValueError("Not enough samples available, create a new dataset first.")
+    elif ntrain < theta_train.shape[0]:
+        theta_train = theta_train[:ntrain]
+        x_train = x_train[:ntrain]
+
+    base_dir = f"../results/{task_name}/npe/"
+    model_dir = prepare_for_npe_training(base_dir, ntrain)
+    save_npe_metadata(model_dir, estimator, ntrain)
+
+    print(
+        f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata_dir: {data_dir}\nsave_dir: ./results/{task_name}\n"
+    )
+
+    npe_posterior = train_npe(task_name, theta_train, x_train, num_observation=1)
+    torch.save(npe_posterior, path.join(model_dir, f"npe_posterior_n{ntrain}.pt"))
+    print(f"Saved NPE at {model_dir}.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Training the classifier")
+
+    parser.add_argument(
+        "--task",
+        type=str,
+        help="sbibm task name",
+    )
+
+    parser.add_argument(
+        "--estimator",
+        type=str,
+        default="nsf",
+        help="Type of density estimator, one of 'nsf', 'maf'. Defaults to 'nsf'.",
+    )
+
+    parser.add_argument(
+        "--ntrain",
+        type=int,
+        default=50000,
+        help="Number of training samples",
+    )
+
+    args = parser.parse_args()
+
+    main(args)
