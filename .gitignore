@@ -4,7 +4,17 @@ data
 docs
 tests
 sbi-logs
-results/*/
+
+results/*
+!results/lotka_volterra/
+results/lotka_volterra/*/
+!results/sir/
+results/sir/*/
+*.pt
+*.png
+*.pdf
+*.jpg
+!*.ipynb
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/venv,macos,linux,python,visualstudiocode,jupyternotebooks,text
@@ -279,3 +289,5 @@ pip-selfcheck.json
 *.code-workspace
 
 # End of https://www.toptal.com/developers/gitignore/api/venv,macos,linux,python,visualstudiocode,jupyternotebooks,text
+.vscode/launch.json
+.vscode/settings.json
