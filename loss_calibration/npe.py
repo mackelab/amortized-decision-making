@@ -1,17 +1,16 @@
+import argparse
 import logging
-import torch
+from os import path
 from typing import Optional
+
 import sbibm
-from sbibm.algorithms.sbi.utils import (
-    wrap_posterior,
-    wrap_prior_dist,
-)
+import torch
 from sbi import inference as inference
 from sbi.utils.get_nn_models import posterior_nn
+from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
+
 import loss_calibration.toy_example as toy
 from loss_calibration.utils import prepare_for_npe_training, save_npe_metadata
-from os import path
-import argparse
 
 
 def train_npe(
