@@ -41,7 +41,9 @@ def main(args):
         f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(args.data_dir, task_name)}\nsave at: {save_dir}\n"
     )
 
-    npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=epochs)
+    npe_posterior = train_npe(
+        task_name, theta_train, x_train, max_num_epochs=epochs, device=device
+    )
     torch.save(npe_posterior, path.join(save_dir, f"{estimator}_n{ntrain}.pt"))
     print(f"Saved NPE at {save_dir}.")
 

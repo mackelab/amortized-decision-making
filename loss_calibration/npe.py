@@ -23,6 +23,7 @@ def train_npe(
     z_score_x: Optional[str] = "independent",
     z_score_theta: Optional[str] = "independent",
     max_num_epochs: Optional[int] = 2**31 - 1,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
 
     assert (
@@ -59,7 +60,9 @@ def train_npe(
         z_score_theta=z_score_theta,
     )
 
-    inference_method = inference.SNPE_C(prior, density_estimator=density_estimator_fun)
+    inference_method = inference.SNPE_C(
+        prior, density_estimator=density_estimator_fun
+    ).to(device)
     proposal = prior
 
     # Train for one round
