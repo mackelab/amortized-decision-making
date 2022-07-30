@@ -10,7 +10,7 @@ from sbi.utils.get_nn_models import posterior_nn
 from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
 
 import loss_calibration.toy_example as toy
-from loss_calibration.utils import prepare_for_npe_training, save_npe_metadata
+from loss_calibration.utils import check_base_dir_exists
 
 
 def train_npe(
@@ -111,16 +111,15 @@ def main(args):
         x_train = x_train[:ntrain]
 
     base_dir = f"../results/{task_name}/npe/"
-    model_dir = prepare_for_npe_training(base_dir, ntrain)
-    save_npe_metadata(model_dir, estimator, ntrain)
+    check_base_dir_exists(base_dir)
 
     print(
         f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata_dir: {data_dir}\nsave_dir: ./results/{task_name}\n"
     )
 
-    npe_posterior = train_npe(task_name, theta_train, x_train, num_observation=1)
-    torch.save(npe_posterior, path.join(model_dir, f"npe_posterior_n{ntrain}.pt"))
-    print(f"Saved NPE at {model_dir}.")
+    npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=2)
+    torch.save(npe_posterior, path.join(base_dir, f"{estimator}_n{ntrain}.pt"))
+    print(f"Saved NPE at {base_dir}.")
 
 
 if __name__ == "__main__":
