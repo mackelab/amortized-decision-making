@@ -24,6 +24,7 @@ def main(args):
     ], "Choose one of 'toy_example', 'sir' or 'lotka_volterra'."
 
     ntrain = args.ntrain
+    epochs = args.epochs
 
     data_dir = path.join(args.data_dir, task_name)
     theta_train = torch.load(path.join(data_dir, "theta_train.pt"))
@@ -41,7 +42,7 @@ def main(args):
         f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata_dir: {data_dir}\nsave_dir: ./results/{task_name}\n"
     )
 
-    npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=2)
+    npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=epochs)
     torch.save(npe_posterior, path.join(base_dir, f"{estimator}_n{ntrain}.pt"))
     print(f"Saved NPE at {base_dir}.")
 
@@ -68,6 +69,8 @@ if __name__ == "__main__":
         default=50000,
         help="Number of training samples",
     )
+
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs")
 
     parser.add_argument(
         "--data_dir",
