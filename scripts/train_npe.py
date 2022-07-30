@@ -25,7 +25,7 @@ def main(args):
 
     ntrain = args.ntrain
     epochs = args.epochs
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     theta_train, x_train, _, _, _, _ = load_data(task_name, args.data_dir, device)
     if ntrain > theta_train.shape[0]:
