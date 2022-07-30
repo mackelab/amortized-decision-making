@@ -18,8 +18,6 @@ def train_npe(
     task_name: str,
     theta_train: torch.Tensor,
     x_train: torch.Tensor,
-    num_observation: Optional[int] = None,
-    observation: Optional[torch.Tensor] = None,
     neural_net: str = "nsf",
     hidden_features: int = 50,
     simulation_batch_size: int = 1000,
@@ -30,8 +28,6 @@ def train_npe(
     z_score_theta: Optional[str] = "independent",
     max_num_epochs: Optional[int] = 2**31 - 1,
 ):
-    # assert not (num_observation is None and observation is None)
-    # assert not (num_observation is not None and observation is not None)
 
     assert (
         task_name in ["toy_example"] + sbibm.get_available_tasks()
@@ -54,8 +50,6 @@ def train_npe(
     else:
         task = sbibm.get_task(task_name)
         prior = task.get_prior_dist()
-        # if observation is None:
-        #     observation = task.get_observation(num_observation)
 
         transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
 
