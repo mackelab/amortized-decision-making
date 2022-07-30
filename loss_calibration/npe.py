@@ -1,6 +1,4 @@
-import argparse
 import logging
-from os import path
 from typing import Optional
 
 import sbibm
@@ -10,7 +8,6 @@ from sbi.utils.get_nn_models import posterior_nn
 from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
 
 import loss_calibration.toy_example as toy
-from loss_calibration.utils import check_base_dir_exists
 
 
 def train_npe(
@@ -83,68 +80,3 @@ def train_npe(
         posterior_wrapped = wrap_posterior(posterior, transforms)
 
     return posterior  # , posterior_wrapped
-
-
-def main(args):
-    estimator = args.estimator
-    assert estimator in [
-        "nsf",
-        "maf",
-    ], "Density estimator has to be either 'nsf' or 'maf'."
-
-    task_name = args.task
-    assert task_name in [
-        "toy_example",
-        "sir",
-        "lotka_volterra",
-    ], "Choose one of 'toy_example', 'sir' or 'lotka_volterra'."
-
-    ntrain = args.ntrain
-
-    data_dir = path.join("../data/", task_name)
-    theta_train = torch.load(path.join(data_dir, "theta_train.pt"))
-    x_train = torch.load(path.join(data_dir, "x_train.pt"))
-    if ntrain > theta_train.shape[0]:
-        raise ValueError("Not enough samples available, create a new dataset first.")
-    elif ntrain < theta_train.shape[0]:
-        theta_train = theta_train[:ntrain]
-        x_train = x_train[:ntrain]
-
-    base_dir = f"../results/{task_name}/npe/"
-    check_base_dir_exists(base_dir)
-
-    print(
-        f"Training posterior with {args.ntrain} simulations: \ndensity estimator: {estimator}\ndata_dir: {data_dir}\nsave_dir: ./results/{task_name}\n"
-    )
-
-    npe_posterior = train_npe(task_name, theta_train, x_train, max_num_epochs=2)
-    torch.save(npe_posterior, path.join(base_dir, f"{estimator}_n{ntrain}.pt"))
-    print(f"Saved NPE at {base_dir}.")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Training the classifier")
-
-    parser.add_argument(
-        "--task",
-        type=str,
-        help="sbibm task name",
-    )
-
-    parser.add_argument(
-        "--estimator",
-        type=str,
-        default="nsf",
-        help="Type of density estimator, one of 'nsf', 'maf'. Defaults to 'nsf'.",
-    )
-
-    parser.add_argument(
-        "--ntrain",
-        type=int,
-        default=50000,
-        help="Number of training samples",
-    )
-
-    args = parser.parse_args()
-
-    main(args)
