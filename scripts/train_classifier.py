@@ -45,7 +45,7 @@ def main(args):
 
     if args.parameter >= 0 and args.parameter <= theta_train.shape[1] - 1:
         dim = args.parameter
-        print("Restrict parameters to parameter {dim}.")
+        print(f"Restrict parameters to parameter {dim}.")
         theta_train = theta_train[:, dim : dim + 1]
         theta_val = theta_val[:, dim : dim + 1]
 
@@ -57,7 +57,7 @@ def main(args):
 
     # create directory & save metadata
     save_dir = path.join(args.res_dir, task_name, "classifier")
-    model_dir = prepare_for_training(save_dir, threshold, costs)
+    model_dir = prepare_for_training(save_dir, round(threshold, ndigits=4), costs)
     save_metadata(
         model_dir,
         model=model,
