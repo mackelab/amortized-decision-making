@@ -61,7 +61,7 @@ def train_npe(
     )
 
     inference_method = inference.SNPE_C(
-        prior, density_estimator=density_estimator_fun, device=device
+        prior, density_estimator=density_estimator_fun, device=device.type
     )
     proposal = prior
 
