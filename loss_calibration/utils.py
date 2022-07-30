@@ -128,7 +128,9 @@ def check_base_dir_exists(base_dir: str):
 
 
 def load_data(
-    task_name: str, base_dir: str = "./data"
+    task_name: str,
+    base_dir: str = "./data",
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ) -> Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
 ]:
@@ -143,13 +145,13 @@ def load_data(
     """
     dir = path.join(base_dir, task_name)
     try:
-        theta_train = torch.load(path.join(dir, "theta_train.pt"))
-        x_train = torch.load(path.join(dir, "x_train.pt"))
-        theta_val = torch.load(path.join(dir, "theta_val.pt"))
-        x_val = torch.load(path.join(dir, "x_val.pt"))
-        theta_test = torch.load(path.join(dir, "theta_test.pt"))
-        x_test = torch.load(path.join(dir, "x_test.pt"))
-        print(f"Load data from '{dir}'.")
+        theta_train = torch.load(path.join(dir, "theta_train.pt"), map_location=device)
+        x_train = torch.load(path.join(dir, "x_train.pt"), map_location=device)
+        theta_val = torch.load(path.join(dir, "theta_val.pt"), map_location=device)
+        x_val = torch.load(path.join(dir, "x_val.pt"), map_location=device)
+        theta_test = torch.load(path.join(dir, "theta_test.pt"), map_location=device)
+        x_test = torch.load(path.join(dir, "x_test.pt"), map_location=device)
+        print(f"Load data from '{dir}', device = {device}.")
         return theta_train, x_train, theta_val, x_val, theta_test, x_test
     except FileNotFoundError:
         print("Data not found, check path or generate data first.")
