@@ -318,7 +318,7 @@ def train(
         device (str, optional): Device. Defaults to "cpu".
 
     Returns:
-        Tuple[nn.Module, torch.Tensor]: trained classifier, training loss values
+        Tuple[nn.Module, torch.Tensor, torch.Tensor]: trained classifier, training loss, validation loss
     """
 
     assert (
@@ -503,19 +503,19 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     )
 
 
-def get_stats(clf, x_test, d_test, th_test, loss_criterion):
+def get_raw_stats(clf, theta_test, x_test, threshold):
     clf.eval()
-    preds_test = clf(x_test)
-    preds_test_bin = (preds_test > 0.5).float()
+    d_test = (theta_test > threshold).float()
+    ratio_predicted = clf(x_test)
+    d_predicted = (ratio_predicted > 0.5).float()
+    tn = torch.logical_and(d_predicted == 0, d_test == 0)
+    tp = torch.logical_and(d_predicted == 1, d_test == 1)
+    fn = torch.logical_and(d_predicted == 0, d_test == 1)
+    fp = torch.logical_and(d_predicted == 1, d_test == 0)
+    return tp, fn, fp, tn
 
-    tn = torch.logical_and(preds_test_bin == 0, d_test == 0).sum()
-    tp = torch.logical_and(preds_test_bin == 1, d_test == 1).sum()
-    fn = torch.logical_and(preds_test_bin == 0, d_test == 1).sum()
-    fp = torch.logical_and(preds_test_bin == 1, d_test == 0).sum()
 
-    tpr = tp / (tp + fn)
-    tnr = tn / (tn + fp)
-    acc = (tp + tn) / (tn + tp + fn + fp)
-    loss = loss_criterion(preds_test, d_test, th_test).mean(dim=0).detach()
-
-    return tpr, tnr, acc, loss
+def get_stats(clf, theta_test, x_test, threshold):
+    tp, fn, fp, tn = get_raw_stats(clf, theta_test, x_test, threshold)
+    acc = (tp.sum() + tn.sum()) / (tp.sum() + fn.sum() + fp.sum() + tn.sum())
+    return tp.sum(), fn.sum(), fp.sum(), tn.sum(), acc
