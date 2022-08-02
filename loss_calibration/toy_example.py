@@ -4,8 +4,8 @@ from sbi.utils import BoxUniform
 from loss_calibration.loss import StepLoss_weighted
 
 
-def get_prior(low=0.0, high=5.0):
-    return BoxUniform([low], [high])
+def get_prior(low=0.0, high=5.0, device="cuda" if torch.cuda.is_available() else "cpu"):
+    return BoxUniform([low], [high], device=device)
 
 
 def get_simulator():
@@ -79,12 +79,8 @@ def expected_posterior_loss(
     post = gt_posterior(x_o, lower, upper, resolution)
     cost_pred0, cost_pred1 = evaluate_cost(theta_grid, costs=costs, threshold=threshold)
     # expected posterior loss
-    loss_pred0 = (
-        post * cost_pred0 * (upper - lower) / (resolution - 1)
-    ).sum()  # TODO: check
-    loss_pred1 = (
-        post * cost_pred1 * (upper - lower) / (resolution - 1)
-    ).sum()  # TODO: check
+    loss_pred0 = (post * cost_pred0 * (upper - lower) / (resolution - 1)).sum()
+    loss_pred1 = (post * cost_pred1 * (upper - lower) / (resolution - 1)).sum()
     return loss_pred0, loss_pred1
 
 
@@ -104,3 +100,18 @@ def posterior_ratio(
         x_o, lower, upper, resolution, costs, threshold
     )
     return int_fn / (int_fp + int_fn)
+
+
+def ratio_given_posterior(
+    posterior, x_o, costs, threshold, lower=0.0, upper=5.0, resolution=500
+):
+    theta_linspace = torch.linspace(lower, upper, resolution).unsqueeze(1)
+    posterior_evals = torch.exp(posterior.log_prob(theta_linspace, x=x_o))
+    theta_larger_threshold = (theta_linspace > threshold).squeeze()
+    print(posterior_evals.shape)
+    print(theta_larger_threshold.shape)
+    total_sum = costs[0] * torch.sum(posterior_evals[theta_larger_threshold]) + costs[
+        1
+    ] * torch.sum(posterior_evals[~theta_larger_threshold])
+    ratio = costs[0] * torch.sum(posterior_evals[theta_larger_threshold]) / total_sum
+    return ratio
