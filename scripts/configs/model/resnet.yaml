@@ -1,0 +1,8 @@
+type: resnet
+hidden: [100,100,100]
+epochs: 1000
+lr: 0.001
+num_blocks: 2
+dropout_prob: 0.0
+use_batch_norm: False
+zscore: Independent

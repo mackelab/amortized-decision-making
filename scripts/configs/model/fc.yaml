@@ -1,0 +1,5 @@
+type: fc
+hidden: [100,100,100]
+epochs: 1000
+lr: 0.001
+zscore: Independent

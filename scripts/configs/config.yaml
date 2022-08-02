@@ -1,0 +1,10 @@
+defaults: 
+- _self_
+- task: toy_example
+- model: fc
+
+seed: 0
+ntrain: 50000
+data_dir: ../data/
+res_dir: ../results/
+
