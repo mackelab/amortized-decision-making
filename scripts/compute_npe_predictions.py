@@ -1,35 +1,45 @@
 import torch
 import glob
+import sbibm
 from os import path
-from loss_calibration.loss import BCELoss_weighted, StepLoss_weighted
+from loss_calibration.utils import load_data, posterior_ratio_given_samples
+from loss_calibration.toy_example import ratio_given_posterior
+
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 
-def post_ratio(post, x_o, loss, lower=0.0, upper=5.0, resolution=500):
-    thetas = torch.linspace(lower, upper, resolution).unsqueeze(dim=1)
-    probs = post.log_prob(thetas, x=x_o).exp().unsqueeze(dim=1)
-    assert thetas.shape == probs.shape
-    # expected posterior loss
-    loss_fn = (probs * loss(thetas, 0) * (upper - lower) / resolution).sum()
-    loss_fp = (probs * loss(thetas, 1) * (upper - lower) / resolution).sum()
-    return loss_fn / (loss_fn + loss_fp)
+@hydra.main(version_base=None, config_path="./configs/", config_name="config")
+def main(cfg: DictConfig):
+    print(OmegaConf.to_yaml(cfg))
+    assert path.isdir(cfg.data_dir), "data_dir is no existing directory"
+    assert path.isdir(cfg.res_dir), "res_dir is no existing directory"
 
+    estimator = cfg.model.estimator
+    assert estimator in [
+        "nsf",
+        "maf",
+    ], "Density estimator has to be either 'nsf' or 'maf'."
 
-if __name__ == "__main__":
-    threshold = 2.0
-    costs = [5.0, 1.0]
-    step_loss = StepLoss_weighted(costs, threshold)
+    task_name = cfg.task.name
+    assert task_name in [
+        "toy_example",
+        "sir",
+        "lotka_volterra",
+    ], f"Choose one of 'toy_example', 'sir' or 'lotka_volterra'., got {task_name}."
 
-    # load test data
-    th_test = torch.load(path.join("../data/1d_classifier/", "th_test.pt"))
-    x_test = torch.load(path.join("../data/1d_classifier/", "x_test.pt"))
-    d_test = (th_test > threshold).float()
-    N_test = th_test.shape[0]
-    print("N_test = ", N_test)
+    device = torch.device(
+        "cpu"
+    )  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # load sbi posterior
-    flow = "nsf"
-    files = sorted(glob.glob(path.join("../results/sbi/", f"2022-05*{flow}*0.pt")))
-    print(f"Generating plots for:")
+    threshold = round(cfg.task.T, ndigits=4)
+    parameter = cfg.task.parameter
+    costs = list(cfg.task.costs)
+
+    files = sorted(
+        glob.glob(path.join(cfg.res_dir, task_name, f"npe/{estimator}_n*0.pt"))
+    )
+    print(f"Compute posterior ratios for:")
     # files = [files[-2]] + files[:-2]
     posteriors = []
     nsim = []
@@ -37,17 +47,60 @@ if __name__ == "__main__":
     for file in files:
         print("- ", file)
         posteriors.append(torch.load(file))
-        nsim.append(int(file.split("_")[-1].split(".")[0]))
+        nsim.append(int(file.split("_n")[-1].split(".")[0]))
 
-    for i, p in enumerate(posteriors):
-        preds = torch.as_tensor(
-            [post_ratio(p, x_o, step_loss) for x_o in x_test]
-        ).unsqueeze(dim=1)
-        torch.save(
-            preds,
-            path.join(
-                "./results/sbi/",
-                f"{files[i].split('/')[-1].split('.')[0]}_predictions_t{int(threshold)}_c{int(costs[0])}_{int(costs[1])}.pt",
-            ),
-        )
-        print(i, end=",")
+    num_samples = 10_000
+
+    for npe_posterior in posteriors:
+        if task_name in ["lotka_volterra", "sir"]:
+            # use 10 reference posterior from sbibm paper
+            task = sbibm.get_task(task_name)
+
+            npe_samples = []
+            npe_ratios = []
+            for n in range(10):
+                samples = npe_posterior.sample(
+                    (num_samples,), x=task.get_observation(n + 1)
+                )
+                npe_samples.append(samples)
+                npe_ratio = posterior_ratio_given_samples(
+                    samples[:, parameter], threshold, costs
+                )
+                npe_ratios.append(npe_ratio)
+
+            torch.save(
+                torch.stack(npe_ratios),
+                path.join(
+                    cfg.res_dir,
+                    task_name,
+                    f"npe/{estimator}_n*0_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
+                ),
+            )
+        elif task_name == "toy_example":
+            # evaluate posterior on linspace (1D)
+            _, _, _, _, theta_test, x_test = load_data(task_name, cfg.data_dir, device)
+            theta_test = theta_test[: cfg.ntest]
+            x_test = x_test[: cfg.ntest]
+            N_test = theta_test.shape[0]
+            print("N_test = ", N_test)
+
+            npe_ratios = []
+            for x_o in x_test:
+                npe_ratio = ratio_given_posterior(
+                    npe_posterior, x_o, threshold=threshold, costs=costs
+                )
+                npe_ratios.append(npe_ratio)
+            torch.save(
+                torch.stack(npe_ratios),
+                path.join(
+                    cfg.res_dir,
+                    task_name,
+                    f"npe/{estimator}_n*0_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
+                ),
+            )
+
+        print(npe_ratios)
+
+
+if __name__ == "__main__":
+    main()
