@@ -105,13 +105,17 @@ def posterior_ratio(
 def ratio_given_posterior(
     posterior, x_o, costs, threshold, lower=0.0, upper=5.0, resolution=500
 ):
-    theta_linspace = torch.linspace(lower, upper, resolution).unsqueeze(1)
-    posterior_evals = torch.exp(posterior.log_prob(theta_linspace, x=x_o))
-    theta_larger_threshold = (theta_linspace > threshold).squeeze()
-    print(posterior_evals.shape)
-    print(theta_larger_threshold.shape)
-    total_sum = costs[0] * torch.sum(posterior_evals[theta_larger_threshold]) + costs[
-        1
-    ] * torch.sum(posterior_evals[~theta_larger_threshold])
-    ratio = costs[0] * torch.sum(posterior_evals[theta_larger_threshold]) / total_sum
+    loss = StepLoss_weighted(costs, threshold)
+    theta_linspace = torch.linspace(lower, upper, resolution).unsqueeze(dim=1)
+    posterior_evals = torch.exp(posterior.log_prob(theta_linspace, x=x_o)).unsqueeze(
+        dim=1
+    )
+    assert theta_linspace.shape == posterior_evals.shape
+    int_0 = (
+        posterior_evals * loss(theta_linspace, 0) * (upper - lower) / resolution
+    ).sum()
+    int_1 = (
+        posterior_evals * loss(theta_linspace, 1) * (upper - lower) / resolution
+    ).sum()
+    ratio = int_0 / (int_0 + int_1)
     return ratio
