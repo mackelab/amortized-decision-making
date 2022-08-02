@@ -4,8 +4,8 @@ from sbi.utils import BoxUniform
 from loss_calibration.loss import StepLoss_weighted
 
 
-def get_prior(low=0.0, high=5.0, device="cuda" if torch.cuda.is_available() else "cpu"):
-    return BoxUniform([low], [high], device=device)
+def get_prior(low=0.0, high=5.0):
+    return BoxUniform([low], [high])
 
 
 def get_simulator():
