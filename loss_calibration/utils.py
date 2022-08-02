@@ -52,6 +52,7 @@ def posterior_ratio_given_obs(
 
 def prepare_for_training(
     base_dir: str,
+    parameter: int,
     threshold: float,
     costs: list,
 ) -> str:
@@ -68,7 +69,7 @@ def prepare_for_training(
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
     model_dir = path.join(
         base_dir,
-        f"{timestamp}_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}",
+        f"{timestamp}_t{parameter}_{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}",
     )
     prepare_filestructure(model_dir)
     return model_dir
