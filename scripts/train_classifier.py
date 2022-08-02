@@ -64,7 +64,9 @@ def main(cfg: DictConfig):
 
     # create directory & save metadata
     save_dir = path.join(cfg.res_dir, task_name, "classifier")
-    model_dir = prepare_for_training(save_dir, round(threshold, ndigits=4), costs)
+    model_dir = prepare_for_training(
+        save_dir, parameter, round(threshold, ndigits=4), costs
+    )
     save_metadata(
         model_dir,
         model=model,
