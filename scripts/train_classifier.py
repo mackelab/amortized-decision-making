@@ -63,7 +63,7 @@ def main(cfg: DictConfig):
     epochs = cfg.model.epochs
 
     # create directory & save metadata
-    save_dir = path.join(cfg.res_dir, task_name, "classifier")
+    save_dir = path.join(cfg.res_dir, task_name, "classifier", model, cfg.experiment)
     model_dir = prepare_for_training(
         save_dir, parameter, round(threshold, ndigits=4), costs
     )
