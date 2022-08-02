@@ -1,2 +1,3 @@
 type: npe
 estimator: nsf
+epochs: 1000
