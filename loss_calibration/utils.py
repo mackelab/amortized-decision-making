@@ -93,21 +93,27 @@ def save_metadata(
     model: str,
     input: int,
     hidden_layers: list,
+    z_scoring: str,
     costs: list,
     T: float,
     seed: int,
     lr: float,
     ntrain: int,
+    epochs: int,
+    data_dir=str,
 ):
     metadata = {
         "seed": seed,
         "model": model,
         "architecture": f"{input}-{'-'.join(map(str, hidden_layers))}-1",
+        "z_scoring": z_scoring,
         "optimizer": "Adam",
         "learning_rate": lr,
         "Ntrain": ntrain,
         "threshold": T,
         "costs": costs,
+        "max_num_epochs": epochs,
+        "data_dir": data_dir,
     }
 
     json.dump(metadata, open(f"{model_dir}/metadata.json", "w"))
