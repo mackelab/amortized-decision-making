@@ -54,7 +54,7 @@ def main(cfg: DictConfig):
         theta_train = theta_train[:, dim : dim + 1]
         theta_val = theta_val[:, dim : dim + 1]
 
-    threshold = cfg.task.T
+    threshold = round(cfg.task.T, ndigits=4)
     parameter = cfg.task.parameter
     costs = list(cfg.task.costs)
     hidden_layers = list(cfg.model.hidden)
