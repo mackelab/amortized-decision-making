@@ -37,7 +37,9 @@ def main(cfg: DictConfig):
     costs = list(cfg.task.costs)
 
     files = sorted(
-        glob.glob(path.join(cfg.res_dir, task_name, f"npe/{estimator}_n*0.pt"))
+        glob.glob(
+            path.join(cfg.res_dir, task_name, f"npe/{estimator}_n{cfg.ntrain}.pt")
+        )
     )
     print(f"Compute posterior ratios for:")
     # files = [files[-2]] + files[:-2]
