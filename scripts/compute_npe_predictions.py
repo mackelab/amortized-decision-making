@@ -51,7 +51,7 @@ def main(cfg: DictConfig):
 
     num_samples = 10_000
 
-    for npe_posterior in posteriors:
+    for i, npe_posterior in enumerate(posteriors):
         if task_name in ["lotka_volterra", "sir"]:
             # use 10 reference posterior from sbibm paper
             task = sbibm.get_task(task_name)
@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
                 path.join(
                     cfg.res_dir,
                     task_name,
-                    f"npe/{estimator}_n*0_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
+                    f"npe/{estimator}_n{nsim[i]}_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
                 ),
             )
         elif task_name == "toy_example":
@@ -95,11 +95,9 @@ def main(cfg: DictConfig):
                 path.join(
                     cfg.res_dir,
                     task_name,
-                    f"npe/{estimator}_n*0_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
+                    f"npe/{estimator}_n{nsim[i]}_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
                 ),
             )
-
-        print(npe_ratios)
 
 
 if __name__ == "__main__":
