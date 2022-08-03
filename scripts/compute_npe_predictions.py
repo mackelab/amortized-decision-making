@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
                 path.join(
                     cfg.res_dir,
                     task_name,
-                    f"npe/{estimator}_n{nsim[i]}_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
+                    f"npe/{cfg.experiment}/{estimator}_n{nsim[i]}_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
                 ),
             )
         elif task_name == "toy_example":
@@ -95,7 +95,7 @@ def main(cfg: DictConfig):
                 path.join(
                     cfg.res_dir,
                     task_name,
-                    f"npe/{estimator}_n{nsim[i]}_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
+                    f"npe/{cfg.experiment}/{estimator}_n{nsim[i]}_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
                 ),
             )
 
