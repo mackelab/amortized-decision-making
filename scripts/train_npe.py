@@ -51,7 +51,12 @@ def main(cfg: DictConfig):
     )
 
     npe_posterior = train_npe(
-        task_name, theta_train, x_train, max_num_epochs=epochs, device=device
+        task_name,
+        theta_train,
+        x_train,
+        neural_net=estimator,
+        max_num_epochs=epochs,
+        device=device,
     )
     torch.save(npe_posterior, path.join(save_dir, f"{estimator}_n{ntrain}.pt"))
     print(f"Saved NPE at {save_dir}.")
