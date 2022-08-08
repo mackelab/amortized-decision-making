@@ -106,11 +106,13 @@ def ratio_given_posterior(
     posterior, x_o, costs, threshold, lower=0.0, upper=5.0, resolution=500
 ):
     loss = StepLoss_weighted(costs, threshold)
+    # evaluate posterior on linspace
     theta_linspace = torch.linspace(lower, upper, resolution).unsqueeze(dim=1)
     posterior_evals = torch.exp(posterior.log_prob(theta_linspace, x=x_o)).unsqueeze(
         dim=1
     )
     assert theta_linspace.shape == posterior_evals.shape
+    # compute integrals
     int_0 = (
         posterior_evals * loss(theta_linspace, 0) * (upper - lower) / resolution
     ).sum()

@@ -36,70 +36,60 @@ def main(cfg: DictConfig):
     parameter = cfg.task.parameter
     costs = list(cfg.task.costs)
 
-    files = sorted(
-        glob.glob(
-            path.join(cfg.res_dir, task_name, f"npe/{estimator}_n{cfg.ntrain}.pt")
-        )
-    )
-    print(f"Compute posterior ratios for:")
-    # files = [files[-2]] + files[:-2]
-    posteriors = []
-    nsim = []
-
-    for file in files:
-        print("- ", file)
-        posteriors.append(torch.load(file))
-        nsim.append(int(file.split("_n")[-1].split(".")[0]))
+    file = path.join(cfg.res_dir, task_name, f"npe/{estimator}_n{cfg.ntrain}.pt")
+    npe_posterior = torch.load(file)
+    nsim = cfg.ntrain
 
     num_samples = 10_000
 
-    for i, npe_posterior in enumerate(posteriors):
-        if task_name in ["lotka_volterra", "sir"]:
-            # use 10 reference posterior from sbibm paper
-            task = sbibm.get_task(task_name)
+    if task_name in ["lotka_volterra", "sir"]:
+        # use 10 reference observations + sample from posterior
+        task = sbibm.get_task(task_name)
 
-            npe_samples = []
-            npe_ratios = []
-            for n in range(10):
-                samples = npe_posterior.sample(
-                    (num_samples,), x=task.get_observation(n + 1)
-                )
-                npe_samples.append(samples)
-                npe_ratio = posterior_ratio_given_samples(
-                    samples[:, parameter], threshold, costs
-                )
-                npe_ratios.append(npe_ratio)
-
-            torch.save(
-                torch.stack(npe_ratios),
-                path.join(
-                    cfg.res_dir,
-                    task_name,
-                    f"npe/{cfg.experiment}/{estimator}_n{nsim[i]}_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
-                ),
+        npe_samples = []
+        npe_ratios = []
+        for n in range(10):
+            samples = npe_posterior.sample(
+                (num_samples,), x=task.get_observation(n + 1)
             )
-        elif task_name == "toy_example":
-            # evaluate posterior on linspace (1D)
-            _, _, _, _, theta_test, x_test = load_data(task_name, cfg.data_dir, device)
-            theta_test = theta_test[: cfg.ntest]
-            x_test = x_test[: cfg.ntest]
-            N_test = theta_test.shape[0]
-            print("N_test = ", N_test)
+            npe_samples.append(samples)
+            npe_ratio = posterior_ratio_given_samples(
+                samples[:, parameter], threshold, costs
+            )
+            npe_ratios.append(npe_ratio)
 
-            npe_ratios = []
-            for x_o in x_test:
-                npe_ratio = ratio_given_posterior(
+        torch.save(
+            torch.stack(npe_ratios),
+            path.join(
+                cfg.res_dir,
+                task_name,
+                f"npe/{cfg.experiment}/{estimator}_n{nsim}_predictions_t{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
+            ),
+        )
+    elif task_name == "toy_example":
+        # use test data + evaluate posterior on linspace (1D)
+        _, _, _, _, theta_test, x_test = load_data(task_name, cfg.data_dir, device)
+        theta_test = theta_test[: cfg.ntest]
+        x_test = x_test[: cfg.ntest]
+        N_test = theta_test.shape[0]
+        print("N_test = ", N_test)
+
+        npe_ratio = torch.as_tensor(
+            [
+                ratio_given_posterior(
                     npe_posterior, x_o, threshold=threshold, costs=costs
                 )
-                npe_ratios.append(npe_ratio)
-            torch.save(
-                torch.stack(npe_ratios),
-                path.join(
-                    cfg.res_dir,
-                    task_name,
-                    f"npe/{cfg.experiment}/{estimator}_n{nsim[i]}_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
-                ),
-            )
+                for x_o in x_test
+            ]
+        ).unsqueeze(1)
+        torch.save(
+            npe_ratio,
+            path.join(
+                cfg.res_dir,
+                task_name,
+                f"npe/{cfg.experiment}/{estimator}_n{nsim}_predictions_t{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
+            ),
+        )
 
 
 if __name__ == "__main__":
