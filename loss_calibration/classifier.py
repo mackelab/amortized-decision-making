@@ -230,7 +230,7 @@ def get_mean_and_std(z_scoring: str, x_train: torch.Tensor, min_std: float = 1e-
 def build_classifier(
     model: str,
     # input_dim: int,
-    x_train: torch.Tensor,
+    x_train: Union[torch.Tensor, int],
     hidden_dims: Iterable,
     output_dim: int,
     context=None,
@@ -239,16 +239,24 @@ def build_classifier(
     dropout_prob=0.0,
     use_batch_norm=False,
     z_scoring: Optional[str] = "Independent",
+    mean=Optional[float],
+    std=Optional[float],
 ):
     # check z_scoring
     if z_scoring.capitalize() in ["None", "Independent", "Structured"]:
-        mean, std = get_mean_and_std(z_scoring, x_train)
+        if type(x_train) == int:
+            input_dim = x_train
+            assert (
+                mean is not None and std is not None
+            ), "Provide training data or mean and std."
+        else:
+            mean, std = get_mean_and_std(z_scoring, x_train)
+            input_dim = x_train.shape[1]
+
     else:
         raise ValueError(
             "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
         )
-
-    input_dim = x_train.shape[1]
 
     if model == "fc":
         clf = FeedforwardNN(
