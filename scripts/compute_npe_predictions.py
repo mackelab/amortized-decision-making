@@ -35,22 +35,21 @@ def main(cfg: DictConfig):
     threshold = round(cfg.task.T, ndigits=4)
     parameter = cfg.task.parameter
     costs = list(cfg.task.costs)
-
-    file = path.join(cfg.res_dir, task_name, f"npe/{estimator}_n{cfg.ntrain}.pt")
-    npe_posterior = torch.load(file)
     nsim = cfg.ntrain
 
-    num_samples = 10_000
+    file = path.join(cfg.res_dir, task_name, f"npe/{estimator}_n{nsim}.pt")
+    npe_posterior = torch.load(file)
 
     if task_name in ["lotka_volterra", "sir"]:
         # use 10 reference observations + sample from posterior
         task = sbibm.get_task(task_name)
+        num_samples_from_posterior = 10_000
 
         npe_samples = []
         npe_ratios = []
         for n in range(10):
             samples = npe_posterior.sample(
-                (num_samples,), x=task.get_observation(n + 1)
+                (num_samples_from_posterior,), x=task.get_observation(n + 1)
             )
             npe_samples.append(samples)
             npe_ratio = posterior_ratio_given_samples(
