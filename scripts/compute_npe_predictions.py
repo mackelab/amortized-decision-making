@@ -67,7 +67,7 @@ def main(cfg: DictConfig):
         )
     elif task_name == "toy_example":
         # use test data + evaluate posterior on linspace (1D)
-        _, _, _, _, theta_test, x_test = load_data(task_name, cfg.data_dir, device)
+        _, _, theta_test, x_test, _, _ = load_data(task_name, cfg.data_dir, device)
         theta_test = theta_test[: cfg.ntest]
         x_test = x_test[: cfg.ntest]
         N_test = theta_test.shape[0]
