@@ -11,6 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 @hydra.main(version_base=None, config_path="./configs/", config_name="config")
 def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
+    _ = torch.manual_seed(cfg.seed)
 
     assert path.isdir(cfg.data_dir), "data_dir is no existing directory"
     assert path.isdir(cfg.res_dir), "res_dir is no existing directory"
