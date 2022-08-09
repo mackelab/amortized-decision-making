@@ -2,7 +2,11 @@ from os import path
 
 import torch
 from loss_calibration.npe import train_npe
-from loss_calibration.utils import check_base_dir_exists, load_data
+from loss_calibration.utils import (
+    check_base_dir_exists,
+    load_data,
+    prepare_filestructure,
+)
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -46,6 +50,7 @@ def main(cfg: DictConfig):
 
     save_dir = path.join(cfg.res_dir, f"{task_name}/npe/")
     check_base_dir_exists(save_dir)
+    prepare_filestructure(path.join(save_dir, "seeds", cfg.seed))
 
     print(
         f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir}\n"
@@ -59,7 +64,10 @@ def main(cfg: DictConfig):
         max_num_epochs=epochs,
         device=device,
     )
-    torch.save(npe_posterior, path.join(save_dir, f"{estimator}_n{ntrain}.pt"))
+    torch.save(
+        npe_posterior,
+        path.join(save_dir, "seeds", cfg.seed, f"{estimator}_n{ntrain}.pt"),
+    )
     print(f"Saved NPE at {save_dir}.")
 
 
