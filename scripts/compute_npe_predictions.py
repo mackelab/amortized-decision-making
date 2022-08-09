@@ -2,7 +2,11 @@ import torch
 import glob
 import sbibm
 from os import path
-from loss_calibration.utils import load_data, posterior_ratio_given_samples
+from loss_calibration.utils import (
+    load_data,
+    posterior_ratio_given_samples,
+    prepare_filestructure,
+)
 from loss_calibration.toy_example import ratio_given_posterior
 
 import hydra
@@ -81,12 +85,17 @@ def main(cfg: DictConfig):
                 for x_o in x_test
             ]
         ).unsqueeze(1)
+
+        # extra folder per seed
+        save_path = path.join(
+            cfg.res_dir, task_name, f"npe/{cfg.experiment}/{cfg.seed}"
+        )
+        prepare_filestructure(save_path)
         torch.save(
             npe_ratio,
             path.join(
-                cfg.res_dir,
-                task_name,
-                f"npe/{cfg.experiment}/{estimator}_n{nsim}_predictions_t{parameter}_{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
+                save_path,
+                f"{estimator}_n{nsim}_predictions_t{parameter}_{str(threshold).replace('.', '_')}_c{int(costs[0])}_{int(costs[1])}.pt",
             ),
         )
 
