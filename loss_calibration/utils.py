@@ -121,7 +121,7 @@ def save_metadata(
 
 
 def check_base_dir_exists(base_dir: str):
-    """Create directory with timestamp to save model
+    """Check if directory exists
 
     Args:
         base_dir (str): Base directory to save model
@@ -235,6 +235,7 @@ def raw_stats_given_predictions(predictions, theta_test, threshold):
 
 
 def stats_given_predictions(predictions, theta_test, threshold):
+    assert predictions.shape == theta_test.shape
     tp, fn, fp, tn = raw_stats_given_predictions(predictions, theta_test, threshold)
     acc = (tp.sum() + tn.sum()) / (tp.sum() + fn.sum() + fp.sum() + tn.sum())
     return tp.sum(), fn.sum(), fp.sum(), tn.sum(), acc
