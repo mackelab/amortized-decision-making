@@ -69,7 +69,7 @@ class FeedforwardNN(nn.Module):
     def forward(self, x: torch.Tensor):
         if x.shape[1] != self.in_dim:
             raise ValueError(
-                "Expected inputs of dim {}, got {}.".format(self._in_dim, x.shape[1])
+                "Expected inputs of dim {}, got {}.".format(self.in_dim, x.shape[1])
             )
         if self.z_scored:
             x = self.standardize_layer(x)
