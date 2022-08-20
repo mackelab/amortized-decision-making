@@ -8,6 +8,7 @@ from sbi.utils.get_nn_models import posterior_nn
 from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
 
 import loss_calibration.toy_example as toy
+import loss_calibration.linear_gaussian as lin_gauss
 
 
 def train_npe(
@@ -27,7 +28,7 @@ def train_npe(
 ):
 
     assert (
-        task_name in ["toy_example"] + sbibm.get_available_tasks()
+        task_name in ["toy_example", "linear_gaussian"] + sbibm.get_available_tasks()
     ), "Task has to be available in sbibm or 'toy_example'."
     log = logging.getLogger(__name__)
     log.info(f"Running NPE")
@@ -44,6 +45,8 @@ def train_npe(
 
     if task_name == "toy_example":
         prior = toy.get_prior()
+    elif task_name == "linear_gaussian":
+        prior = lin_gauss.get_prior()
     else:
         task = sbibm.get_task(task_name)
         prior = task.get_prior_dist()
@@ -79,7 +82,7 @@ def train_npe(
     )
     posterior = inference_method.build_posterior(density_estimator)
 
-    if task_name != "toy_example":
+    if task_name not in ["linear_gaussian", "toy_example"]:
         posterior_wrapped = wrap_posterior(posterior, transforms)
 
     return posterior  # , posterior_wrapped

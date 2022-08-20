@@ -25,7 +25,8 @@ def main(cfg: DictConfig):
         "toy_example",
         "sir",
         "lotka_volterra",
-    ], "Choose one of 'toy_example', 'sir' or 'lotka_volterra'."
+        "linear_gaussian",
+    ], "Choose one of 'linear_gaussian', 'toy_example', 'sir' or 'lotka_volterra'."
 
     assert cfg.model.type == "npe"
 
@@ -50,7 +51,7 @@ def main(cfg: DictConfig):
 
     save_dir = path.join(cfg.res_dir, f"{task_name}/npe/")
     check_base_dir_exists(save_dir)
-    prepare_filestructure(path.join(save_dir, "seeds", cfg.seed))
+    prepare_filestructure(path.join(save_dir, "seeds", str(cfg.seed)))
 
     print(
         f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir}\n"
@@ -66,7 +67,7 @@ def main(cfg: DictConfig):
     )
     torch.save(
         npe_posterior,
-        path.join(save_dir, "seeds", cfg.seed, f"{estimator}_n{ntrain}.pt"),
+        path.join(save_dir, "seeds", str(cfg.seed), f"{estimator}_n{ntrain}.pt"),
     )
     print(f"Saved NPE at {save_dir}.")
 

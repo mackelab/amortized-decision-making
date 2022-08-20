@@ -5,6 +5,8 @@ from os import path
 import torch
 import loss_calibration.toy_example as toy
 import loss_calibration.lotka_volterra as lv
+import loss_calibration.linear_gaussian as lin_gauss
+import loss_calibration.sir as sir
 
 torch.manual_seed(758)
 
@@ -15,15 +17,20 @@ def main(args):
     n_val = args.nval
     n_test = args.ntest
 
-    assert task in ["toy_example", "lotka_volterra"]
+    assert task in ["toy_example", "lotka_volterra", "sir", "linear_gaussian"]
 
     if task == "toy_example":
         prior = toy.get_prior()
         simulator = toy.get_simulator()
-
-    if task == "lotka_volterra":
+    elif task == "lotka_volterra":
         prior = lv.get_prior()
         simulator = lv.get_simulator()
+    elif task == "sir":
+        prior = sir.get_prior()
+        simulator = sir.get_simulator()
+    elif task == "linear_gaussian":
+        prior = lin_gauss.get_prior()
+        simulator = lin_gauss.get_simulator()
 
     thetas = prior.sample((n_train + n_test + n_val,))
     observations = simulator(thetas)
