@@ -49,20 +49,13 @@ def StepLoss_weighted(weights, threshold):
     return loss
 
 
-def SigmoidLoss_weighted(weights, threshold):
-    """Sigmoid Loss, differentiable approximation of Step Loss
+class SigmoidLoss_weighted:
+    def __init__(self, weights, threshold) -> None:
+        assert len(weights) == 2, f"Expected 2, got {len(weights)}"
+        self.weights = weights
+        self.threshold = threshold
 
-    Args:
-        weights (list): cost of misclassification, weights[0] = cost of FN, weights[1]=cost of FP
-        threshold (float): threshold for decision-making
-
-    Returns:
-        function: loss function L(theta, prediction)
-    """
-
-    assert len(weights) == 2, f"Expected 2, got {len(weights)}"
-
-    def loss(true_theta, decision, dim=None, slope=100):
+    def __call__(self, true_theta, decision, dim=None, slope=100):
         """custom loss function (BCE with class weights)
 
         Args:
@@ -87,14 +80,60 @@ def SigmoidLoss_weighted(weights, threshold):
 
         return (
             decision
-            * (1 - torch.sigmoid(slope * (true_theta - threshold)))
-            * weights[1]
+            * (1 - torch.sigmoid(slope * (true_theta - self.threshold)))
+            * self.weights[1]
             + (1 - decision)
-            * torch.sigmoid(slope * (true_theta - threshold))
-            * weights[0]
+            * torch.sigmoid(slope * (true_theta - self.threshold))
+            * self.weights[0]
         )
 
-    return loss
+
+# def SigmoidLoss_weighted(weights, threshold):
+#     """Sigmoid Loss, differentiable approximation of Step Loss
+
+#     Args:
+#         weights (list): cost of misclassification, weights[0] = cost of FN, weights[1]=cost of FP
+#         threshold (float): threshold for decision-making
+
+#     Returns:
+#         function: loss function L(theta, prediction)
+#     """
+
+#     assert len(weights) == 2, f"Expected 2, got {len(weights)}"
+
+#     def loss(true_theta, decision, dim=None, slope=100):
+#         """custom loss function (BCE with class weights)
+
+#         Args:
+#             theta (torch.Tensor): observed/true parameter values
+#             decision (torch.Tensor or float): indicates decision: 0 (below threshold) or  1(above treshold)
+#             threshold (torch.Tensor): threshold for binarized decisons.
+
+#         Returns:
+#             float: incurred loss
+#         """
+
+#         if type(decision) == float or type(decision) == int:
+#             assert (
+#                 decision == 0.0 or decision == 1.0
+#             ), "Decision has to be either 0 or 1"
+#         else:
+#             assert torch.logical_or(
+#                 decision == 0.0, decision == 1.0
+#             ).all(), (
+#                 "All values have to be either 0 (below threshold) or  1(above treshold)"
+#             )
+
+#         return (
+#             decision
+#             * (1 - torch.sigmoid(slope * (true_theta - threshold)))
+#             * weights[1]
+#             + (1 - decision)
+#             * torch.sigmoid(slope * (true_theta - threshold))
+#             * weights[0]
+#         )
+
+#     return loss
 
 
 def LinearLoss_weighted(weights, threshold):
