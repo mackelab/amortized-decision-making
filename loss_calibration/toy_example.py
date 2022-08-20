@@ -94,7 +94,12 @@ def prediction_gt_posterior(
 
 
 def posterior_ratio(
-    x_o, lower=0.0, upper=5.0, resolution=500, costs=[5.0, 1.0], threshold=2.0
+    x_o,
+    costs,
+    threshold,
+    lower=0.0,
+    upper=5.0,
+    resolution=500,
 ):
     int_fn, int_fp = expected_posterior_loss(
         x_o, lower, upper, resolution, costs, threshold
@@ -103,7 +108,13 @@ def posterior_ratio(
 
 
 def ratio_given_posterior(
-    posterior, x_o, costs, threshold, lower=0.0, upper=5.0, resolution=500
+    posterior,
+    x_o,
+    costs,
+    threshold,
+    lower=0.0,
+    upper=5.0,
+    resolution=500,
 ):
     loss = StepLoss_weighted(costs, threshold)
     # evaluate posterior on linspace
