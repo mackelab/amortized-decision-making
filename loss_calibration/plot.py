@@ -118,3 +118,29 @@ def plot_predictions(
     ax.set_ylabel(r"$x$")
     ax.legend()
     return fig, ax
+
+
+def plot_stats_vs_n():
+    pass
+
+
+def heatmap_joint(
+    ax,
+    values,
+    cmap="viridis",
+    extent=[0, 5, 10, 220],
+    vmin=0,
+    vmax=1,
+):
+    ax.imshow(
+        values.rot90(),
+        cmap=cmap,
+        interpolation="none",
+        extent=extent,
+        aspect="auto",
+        vmin=vmin,
+        vmax=vmax,
+    )
+    ax.set_xlabel(r"$\theta$")
+    ax.set_ylabel(r"$x$")
+    return ax
