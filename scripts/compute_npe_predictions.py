@@ -27,6 +27,7 @@ def main(cfg: DictConfig):
 
     task_name = cfg.task.name
     assert task_name in [
+        "linear_gaussian",
         "toy_example",
         "sir",
         "lotka_volterra",
@@ -69,7 +70,7 @@ def main(cfg: DictConfig):
                 f"npe/{cfg.experiment}/{estimator}_n{nsim}_predictions_t{parameter}_{threshold}_c{int(costs[0])}_{int(costs[1])}.pt",
             ),
         )
-    elif task_name == "toy_example":
+    elif task_name in ["linear_gaussian", "toy_example"]:
         # use test data + evaluate posterior on linspace (1D)
         _, _, theta_test, x_test, _, _ = load_data(task_name, cfg.data_dir, device)
         theta_test = theta_test[: cfg.ntest]
@@ -87,9 +88,7 @@ def main(cfg: DictConfig):
         ).unsqueeze(1)
 
         # extra folder per seed
-        save_path = path.join(
-            cfg.res_dir, task_name, f"npe/{cfg.experiment}/{cfg.seed}"
-        )
+        save_path = path.join(cfg.res_dir, task_name, "npe", cfg.experiment)
         prepare_filestructure(save_path)
         torch.save(
             npe_ratio,

@@ -10,5 +10,6 @@ density_estimator: maf
 num_monte_carlo_samples_likelihood: 20
 num_monte_carlo_samples_posterior: 1
 n_rounds: 5
+samples_per_round: 1000
 
 sampler: rejection

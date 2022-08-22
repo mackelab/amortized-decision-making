@@ -2,10 +2,9 @@ from copy import deepcopy
 from os import path
 
 import hydra
-import matplotlib.pyplot as plt
 import torch
 from omegaconf import DictConfig, OmegaConf
-from sbi.inference import SNLE, SNPE, MCMCPosterior, RejectionPosterior, VIPosterior
+from sbi.inference import SNLE, SNPE, MCMCPosterior, RejectionPosterior
 from sbi.inference.potentials.base_potential import BasePotential
 from sbi.utils import mcmc_transform
 from sbi.utils.torchutils import atleast_2d
@@ -14,7 +13,7 @@ from torch import zeros
 import loss_calibration.linear_gaussian as lin_gauss
 import loss_calibration.lotka_volterra as lv
 import loss_calibration.toy_example as toy
-from loss_calibration.loss import SigmoidLoss_weighted, StepLoss_weighted
+from loss_calibration.loss import SigmoidLoss_weighted
 
 
 class AcquisitionPotential(BasePotential):

@@ -1,4 +1,5 @@
 from os import path
+import os
 
 import torch
 from loss_calibration.npe import train_npe
@@ -42,7 +43,11 @@ def main(cfg: DictConfig):
         "cpu"
     )  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    theta_train, x_train, _, _, _, _ = load_data(task_name, cfg.data_dir, device)
+    print("Current path:", os.getcwd())
+    if "active_learning" in cfg.data_dir:
+        theta_train, x_train, _, _, _, _ = load_data("", cfg.data_dir, device)
+    else:
+        theta_train, x_train, _, _, _, _ = load_data(task_name, cfg.data_dir, device)
     if ntrain > theta_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
     elif ntrain < theta_train.shape[0]:
