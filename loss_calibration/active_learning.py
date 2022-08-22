@@ -207,6 +207,15 @@ def main(cfg: DictConfig):
             ),
         )
         torch.save(
+            posterior_estimator,
+            path.join(
+                cfg.res_dir,
+                "active_learning",
+                cfg.task.name,
+                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_posterior_estimator.pt",
+            ),
+        )
+        torch.save(
             inference_posterior.build_posterior(posterior_estimator),
             path.join(
                 cfg.res_dir,
