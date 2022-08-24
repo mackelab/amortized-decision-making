@@ -4,7 +4,7 @@ from os import path
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
-from sbi.inference import SNLE, SNPE, MCMCPosterior, RejectionPosterior
+from sbi.inference import SNLE, SNPE, MCMCPosterior, RejectionPosterior, DirectPosterior
 from sbi.inference.potentials.base_potential import BasePotential
 from sbi.utils import mcmc_transform
 from sbi.utils.torchutils import atleast_2d
@@ -123,15 +123,16 @@ def main(cfg: DictConfig):
     )
 
     n_rounds = cfg.n_rounds
+    samples_per_round = cfg.samples_per_round
     proposal = prior
 
     # inference objects
     inference_likelihood = SNLE(prior, density_estimator=cfg.density_estimator)
     inference_posterior = SNPE(prior, density_estimator=cfg.density_estimator)
 
-    for r in range(n_rounds):  # rounds
+    for r in range(1, n_rounds + 1):  # rounds
         print(f"\n----- ROUND {r} -----")
-        theta = proposal.sample((1000,))
+        theta = proposal.sample((samples_per_round,))
         x = sim(theta)
 
         # train both SNLE and SNPE
@@ -167,6 +168,7 @@ def main(cfg: DictConfig):
         # save objects from current round
         threshold_to_str = str(threshold).replace(".", "_")
         costs_to_str = str(int(costs[0])) + "_" + str(int(costs[1]))
+        prefix = f"t{parameter}_{threshold_to_str}_c{costs_to_str}_{samples_per_round}_round{r}_"
 
         torch.save(
             theta,
@@ -174,16 +176,27 @@ def main(cfg: DictConfig):
                 cfg.res_dir,
                 "active_learning",
                 cfg.task.name,
-                f"round{r}_sampled_theta.pt",
+                prefix + "theta.pt",
             ),
         )
+
+        torch.save(
+            x,
+            path.join(
+                cfg.res_dir,
+                "active_learning",
+                cfg.task.name,
+                prefix + "x.pt",
+            ),
+        )
+
         torch.save(
             potential,
             path.join(
                 cfg.res_dir,
                 "active_learning",
                 cfg.task.name,
-                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_potential.pt",
+                prefix + "potential.pt",
             ),
         )
 
@@ -193,7 +206,7 @@ def main(cfg: DictConfig):
                 cfg.res_dir,
                 "active_learning",
                 cfg.task.name,
-                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_proposal.pt",
+                prefix + "proposal.pt",
             ),
         )
         torch.save(
@@ -202,25 +215,26 @@ def main(cfg: DictConfig):
                 cfg.res_dir,
                 "active_learning",
                 cfg.task.name,
-                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_likelihood_estimator.pt",
+                prefix + "likelihood_estimator.pt",
             ),
         )
+        torch.save(
+            DirectPosterior(posterior_estimator, prior=prior),
+            path.join(
+                cfg.res_dir,
+                "active_learning",
+                cfg.task.name,
+                prefix + f"posterior_n{r*samples_per_round}.pt",
+            ),
+        )
+
         torch.save(
             posterior_estimator,
             path.join(
                 cfg.res_dir,
                 "active_learning",
                 cfg.task.name,
-                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_posterior_estimator.pt",
-            ),
-        )
-        torch.save(
-            inference_posterior.build_posterior(posterior_estimator),
-            path.join(
-                cfg.res_dir,
-                "active_learning",
-                cfg.task.name,
-                f"t{parameter}_{threshold_to_str}_c{costs_to_str}_round{r}_posterior.pt",
+                prefix + "posterior_estimator.pt",
             ),
         )
 
