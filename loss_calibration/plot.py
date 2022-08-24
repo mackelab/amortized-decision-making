@@ -131,16 +131,32 @@ def heatmap_joint(
     extent=[0, 5, 10, 220],
     vmin=0,
     vmax=1,
+    norm=None,
+    return_im=False,
 ):
-    ax.imshow(
-        values.rot90(),
-        cmap=cmap,
-        interpolation="none",
-        extent=extent,
-        aspect="auto",
-        vmin=vmin,
-        vmax=vmax,
-    )
+    if norm is None:
+        im = ax.imshow(
+            values.rot90(),
+            cmap=cmap,
+            interpolation="none",
+            extent=extent,
+            aspect="auto",
+            vmin=vmin,
+            vmax=vmax,
+        )
+    else:
+        im = ax.imshow(
+            values.rot90(),
+            cmap=cmap,
+            interpolation="none",
+            extent=extent,
+            aspect="auto",
+            norm=norm,
+        )
     ax.set_xlabel(r"$\theta$")
     ax.set_ylabel(r"$x$")
-    return ax
+
+    if return_im:
+        return ax, im
+    else:
+        return ax
