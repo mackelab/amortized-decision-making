@@ -77,7 +77,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_dir",
         default="../data/",
-        help="Directory to save the data set",
+        help="Directory to save the data set. Make sure it exists before as well as a subfolder with the task name.",
     )
 
     args = parser.parse_args()
