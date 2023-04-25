@@ -76,10 +76,12 @@ class FeedforwardNN(nn.Module):
                     self.in_dim - a.shape[1], x.shape[1]
                 )
             )
+
+        input = torch.concatenate([x, a], dim=1)
         if self.z_scored:
-            x = self.standardize_layer(x)
-        concat = torch.concatenate([x, a], dim=1)
-        out = self.input_layer(concat)
+            x = self.standardize_layer(input)
+        # concat = torch.concatenate([x, a], dim=1)
+        out = self.input_layer(x)
         out = self.activation(out)
 
         for layer in self.hidden_layers:
@@ -109,32 +111,30 @@ def build_classifier(
     model: str,
     # input_dim: int,
     x_train: Union[torch.Tensor, int],
-    action_dim: int,
+    action_train: Union[torch.Tensor, int],
     hidden_dims: Iterable,
     output_dim: int,
-    context=None,
-    num_blocks=2,
     activation: Callable = nn.Sigmoid(),
-    dropout_prob=0.0,
-    use_batch_norm=False,
     z_scoring: Optional[str] = "Independent",
     mean=Optional[float],
     std=Optional[float],
 ):
     # check z_scoring
+    assert type(x_train) == type(action_train)
     if z_scoring.capitalize() in ["None", "Independent", "Structured"]:
         if type(x_train) == int:
-            input_dim = x_train
+            input_dim = x_train + action_train
             assert (
                 mean is not None and std is not None
             ), "Provide training data or mean and std."
         else:
-            mean, std = get_mean_and_std(z_scoring, x_train)
-            input_dim = x_train.shape[1]
-        input_dim += action_dim
+            input = torch.concatenate([x_train, action_train], dim=1)
+            mean, std = get_mean_and_std(z_scoring, input)
+            input_dim = input.shape[1]
+        # input_dim += action_dim
     else:
         raise ValueError(
-            "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
+            "Invalid z-scoring option, use 'None', 'Independent', 'Structured'."
         )
 
     if model == "fc":
@@ -143,20 +143,6 @@ def build_classifier(
             hidden_dims,
             output_dim,
             activation,
-            mean,
-            std,
-            z_scoring.capitalize(),
-        )
-    elif model == "resnet":
-        clf = ResNet(
-            input_dim,
-            hidden_dims,
-            output_dim,
-            context,
-            num_blocks,
-            activation,
-            dropout_prob,
-            use_batch_norm,
             mean,
             std,
             z_scoring.capitalize(),
