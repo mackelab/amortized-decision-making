@@ -1,12 +1,11 @@
-import torch
-from torch import nn
-from os import path
-from typing import Callable, Dict, Tuple, Iterable, Union, Optional
-from loss_calibration.loss import BCELoss_weighted
 from copy import deepcopy
-from torch.utils.data import DataLoader, TensorDataset
+from os import path
+from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 
+import torch
 from sbi.utils.sbiutils import Standardize
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 
 class FeedforwardNN(nn.Module):
@@ -40,9 +39,7 @@ class FeedforwardNN(nn.Module):
         elif z_scoring.capitalize() == "None":
             z_scoring_bool = False
         else:
-            raise ValueError(
-                "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
-            )
+            raise ValueError("Invalid z-scoring opion, use 'None', 'Independent', 'Structured'.")
 
         super(FeedforwardNN, self).__init__()
 
@@ -65,6 +62,7 @@ class FeedforwardNN(nn.Module):
 
         # Activation function
         self.activation = activation
+        # self.output_transform = nn.ReLU()
 
     def forward(self, x: torch.Tensor, a: torch.Tensor):
         assert (
@@ -72,9 +70,7 @@ class FeedforwardNN(nn.Module):
         ), "Observations and actions should share the first dimension, i.e. same number of samples."
         if x.shape[1] != self.in_dim - a.shape[1]:
             raise ValueError(
-                "Expected inputs of dim {}, got {}.".format(
-                    self.in_dim - a.shape[1], x.shape[1]
-                )
+                "Expected inputs of dim {}, got {}.".format(self.in_dim - a.shape[1], x.shape[1])
             )
 
         input = torch.concatenate([x, a], dim=1)
@@ -90,6 +86,7 @@ class FeedforwardNN(nn.Module):
             out = self.activation(out)
 
         out = self.final_layer(out)
+        # out = self.output_transform(out)
         return out
 
 
@@ -124,18 +121,14 @@ def build_classifier(
     if z_scoring.capitalize() in ["None", "Independent", "Structured"]:
         if type(x_train) == int:
             input_dim = x_train + action_train
-            assert (
-                mean is not None and std is not None
-            ), "Provide training data or mean and std."
+            assert mean is not None and std is not None, "Provide training data or mean and std."
         else:
             input = torch.concatenate([x_train, action_train], dim=1)
             mean, std = get_mean_and_std(z_scoring, input)
             input_dim = input.shape[1]
         # input_dim += action_dim
     else:
-        raise ValueError(
-            "Invalid z-scoring option, use 'None', 'Independent', 'Structured'."
-        )
+        raise ValueError("Invalid z-scoring option, use 'None', 'Independent', 'Structured'.")
 
     if model == "fc":
         clf = FeedforwardNN(
@@ -202,9 +195,7 @@ def train(
         training_losses=[],
     )
 
-    train_data = TensorDataset(
-        costs_train.to(device), x_train.to(device), a_train.to(device)
-    )
+    train_data = TensorDataset(costs_train.to(device), x_train.to(device), a_train.to(device))
     val_data = TensorDataset(costs_val.to(device), x_val.to(device), a_val.to(device))
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
