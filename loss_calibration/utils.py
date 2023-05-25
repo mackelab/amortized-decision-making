@@ -1,9 +1,10 @@
-from email.mime import base
-from os import mkdir, path
-from datetime import datetime
-import torch
 import json
+from datetime import datetime
+from email.mime import base
+from os import getcwd, mkdir, path
 from typing import Tuple
+
+import torch
 
 
 def posterior_ratio_given_samples(
@@ -138,9 +139,7 @@ def load_data(
     task_name: str,
     base_dir: str = "./data",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-) -> Tuple[
-    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Load training, validation and test data from folder.
 
     Args:
@@ -162,6 +161,7 @@ def load_data(
         return theta_train, x_train, theta_val, x_val, theta_test, x_test
     except FileNotFoundError:
         print("Data not found, check path or generate data first.")
+        print(f"Current path: {getcwd()}, provided path to data: {dir}")
 
 
 def save_data(
