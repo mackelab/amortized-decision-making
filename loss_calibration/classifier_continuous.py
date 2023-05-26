@@ -7,6 +7,8 @@ from sbi.utils.sbiutils import Standardize
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+torch.manual_seed(849)
+
 
 class FeedforwardNN(nn.Module):
     def __init__(
@@ -15,6 +17,7 @@ class FeedforwardNN(nn.Module):
         hidden_dims: Iterable,
         output_dim: int,
         activation: Callable = nn.Sigmoid(),
+        output_transform: Callable = nn.Identity(),
         mean: Union[torch.Tensor, float] = None,
         std: Union[torch.Tensor, float] = None,
         z_scoring: Optional[str] = "Independent",
@@ -62,7 +65,7 @@ class FeedforwardNN(nn.Module):
 
         # Activation function
         self.activation = activation
-        # self.output_transform = nn.ReLU()
+        self.output_transform = output_transform
 
     def forward(self, x: torch.Tensor, a: torch.Tensor):
         assert (
@@ -86,7 +89,7 @@ class FeedforwardNN(nn.Module):
             out = self.activation(out)
 
         out = self.final_layer(out)
-        # out = self.output_transform(out)
+        out = self.output_transform(out)
         return out
 
 
@@ -112,6 +115,7 @@ def build_classifier(
     hidden_dims: Iterable,
     output_dim: int,
     activation: Callable = nn.Sigmoid(),
+    output_transform: Callable = nn.Identity(),
     z_scoring: Optional[str] = "Independent",
     mean=Optional[float],
     std=Optional[float],
@@ -132,13 +136,14 @@ def build_classifier(
 
     if model == "fc":
         clf = FeedforwardNN(
-            input_dim,
-            hidden_dims,
-            output_dim,
-            activation,
-            mean,
-            std,
-            z_scoring.capitalize(),
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            output_dim=output_dim,
+            activation=activation,
+            output_transform=output_transform,
+            mean=mean,
+            std=std,
+            z_scoring=z_scoring.capitalize(),
         )
     else:
         raise NotImplementedError
