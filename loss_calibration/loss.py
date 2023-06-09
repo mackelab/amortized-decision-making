@@ -1,19 +1,21 @@
 import torch
 
 
-def RevGaussLoss(weights=[1.0, 1.0], factor=5):
+def RevGaussLoss(factor=0.75):
     """Step Loss
 
     Args:
-        weights (list): cost of misclassification, weights[0] = cost of FN, weights[1]=cost of FP
+        factor (float): factor to proportionally increase the affect of actions-dependent costs
 
     Returns:
         function: loss function L(theta, prediction)
     """
 
-    assert len(weights) == 2, f"Expected 2, got {len(weights)}"
-
-    def loss(true_theta, action, dim=None, eps=0.05):
+    def loss(
+        true_theta,
+        action,
+        dim=None,
+    ):
         """custom loss function (BCE with class weights)
 
         Args:
@@ -24,22 +26,20 @@ def RevGaussLoss(weights=[1.0, 1.0], factor=5):
             float: incurred loss
         """
 
-        return 1 - torch.exp(-((true_theta - action) ** 2) / (factor / (action + eps)) ** 2)
+        return 1 - torch.exp(-((true_theta - action) ** 2) / (factor / (action + 1)) ** 2)
 
     return loss
 
 
-def SquaredLoss(weights=[1.0, 1.0], factor=5):
+def SquaredLoss(factor=5):
     """Step Loss
 
     Args:
-        weights (list): cost of misclassification, weights[0] = cost of FN, weights[1]=cost of FP
+        factor (float): factor to proportionally increase the affect of actions-dependent costs
 
     Returns:
         function: loss function L(theta, prediction)
     """
-
-    assert len(weights) == 2, f"Expected 2, got {len(weights)}"
 
     def loss(true_theta, action, dim=None):
         """custom loss function (BCE with class weights)
@@ -131,54 +131,6 @@ class SigmoidLoss_weighted:
         )
 
 
-# def SigmoidLoss_weighted(weights, threshold):
-#     """Sigmoid Loss, differentiable approximation of Step Loss
-
-#     Args:
-#         weights (list): cost of misclassification, weights[0] = cost of FN, weights[1]=cost of FP
-#         threshold (float): threshold for decision-making
-
-#     Returns:
-#         function: loss function L(theta, prediction)
-#     """
-
-#     assert len(weights) == 2, f"Expected 2, got {len(weights)}"
-
-#     def loss(true_theta, decision, dim=None, slope=100):
-#         """custom loss function (BCE with class weights)
-
-#         Args:
-#             theta (torch.Tensor): observed/true parameter values
-#             decision (torch.Tensor or float): indicates decision: 0 (below threshold) or  1(above treshold)
-#             threshold (torch.Tensor): threshold for binarized decisons.
-
-#         Returns:
-#             float: incurred loss
-#         """
-
-#         if type(decision) == float or type(decision) == int:
-#             assert (
-#                 decision == 0.0 or decision == 1.0
-#             ), "Decision has to be either 0 or 1"
-#         else:
-#             assert torch.logical_or(
-#                 decision == 0.0, decision == 1.0
-#             ).all(), (
-#                 "All values have to be either 0 (below threshold) or  1(above treshold)"
-#             )
-
-#         return (
-#             decision
-#             * (1 - torch.sigmoid(slope * (true_theta - threshold)))
-#             * weights[1]
-#             + (1 - decision)
-#             * torch.sigmoid(slope * (true_theta - threshold))
-#             * weights[0]
-#         )
-
-#     return loss
-
-
 def LinearLoss_weighted(weights, threshold):
     """Step Loss
 
@@ -220,18 +172,6 @@ def LinearLoss_weighted(weights, threshold):
         )
 
     return loss
-
-
-# decision                                                0                   1
-# * (1 - torch.gt(theta, threshold).type(torch.float))                        th < T
-# * weights[1]  # * (1 + (threshold - theta))                                 w1
-# + (1 - decision)                                        1
-# * torch.gt(theta, threshold).type(torch.float)          th > T
-# * weights[0]  # * (1 + (theta - threshold))             w0
-#                                                 loss if pred=0, but d_gt = 1, then w0
-#                                                                             loss if pred=1, but d_gt=0, then w1
-# if w1 >> w0 --> avoid FP, okay with FN
-# if w0 >> w1 --> avoid FN, okay with FP
 
 
 def BCELoss_weighted(weights, threshold, cost_fn="step"):
