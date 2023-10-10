@@ -1,5 +1,8 @@
 type: fc
-hidden: [100,100,100]
-epochs: 1000
-lr: 0.001
+hidden: [50,50,50]
+output_transform: ReLU
+activation: ReLU
+epochs: None
+lr: 1e-3
 zscore: Independent
+stop_after_epochs: 50

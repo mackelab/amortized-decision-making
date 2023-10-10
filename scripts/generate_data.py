@@ -5,16 +5,18 @@ from os import getcwd, path
 
 import torch
 
-import loss_calibration.linear_gaussian as lin_gauss
-import loss_calibration.lotka_volterra as lv
-import loss_calibration.sir as sir
-import loss_calibration.toy_example as toy
+from loss_cal.tasks.linear_gaussian import LinGauss
+from loss_cal.tasks.lotka_volterra import LotkaVolterra
+from loss_cal.tasks.sir import SIR
+from loss_cal.tasks.toy_example import ToyExample
 
 torch.manual_seed(758)
 
 
 def main(args):
-    task = args.task
+    task_name = args.task
+    action_type = args.type
+
     n_train = args.ntrain
     n_val = args.nval
     n_test = args.ntest
@@ -22,39 +24,67 @@ def main(args):
     # print(f"task {task}, n_train {n_train}")
     # print(f"Current directory: {getcwd()}")
 
-    assert task in ["toy_example", "lotka_volterra", "sir", "linear_gaussian"]
+    assert task_name in ["toy_example", "lotka_volterra", "sir", "linear_gaussian"]
+    assert action_type in ["binary", "continuous"]
 
-    if task == "toy_example":
-        prior = toy.get_prior()
-        simulator = toy.get_simulator()
-    elif task == "lotka_volterra":
-        prior = lv.get_prior()
-        simulator = lv.get_simulator()
-    elif task == "sir":
-        prior = sir.get_prior()
-        simulator = sir.get_simulator()
-    elif task == "linear_gaussian":
-        prior = lin_gauss.get_prior()
-        simulator = lin_gauss.get_simulator()
+    if task_name == "toy_example":
+        task = ToyExample()
+        prior = task.get_prior()
+        simulator = task.get_simulator()
+        factor, exponential = 2, 3
+    elif task_name == "lotka_volterra":
+        task = LotkaVolterra()
+        prior = task.get_prior()
+        simulator = task.get_simulator()
+        factor, exponential = 2, 2
+    elif task_name == "sir":
+        task = SIR()
+        prior = task.get_prior()
+        simulator = task.get_simulator()
+        factor, exponential = 1, 2
 
-    thetas = prior.sample((n_train + n_test + n_val,))
-    observations = simulator(thetas)
+    elif task_name == "linear_gaussian":
+        task = LinGauss()
+        prior = task.get_prior()
+        simulator = task.get_simulator()
+        factor, exponential = 0.5, 2
+
+    actions = task.actions
+
+    print("Sample parameter values.")
+    thetas = task.sample_prior(n_train + n_test + n_val)
+    print(thetas.shape)
+    print("Run simulator.")
+    observations = []
+    for i, th in enumerate(thetas):
+        print(f"{i}/{thetas.shape[0]}", end="\r")
+        observations.append(simulator(th))
+    observations = torch.vstack(observations)
+    print(observations.shape)
+
+    if action_type != "binary":
+        print("Sample actions.")
+        actions = actions.sample(thetas.shape[0])
+        torch.save(actions[:n_train], path.join(args.data_dir, task_name, "actions_train.pt"))
+        torch.save(actions[n_train : n_train + n_val], path.join(args.data_dir, task_name, "actions_val.pt"))
+        torch.save(actions[n_train + n_val :], path.join(args.data_dir, task_name, "actions_test.pt"))
 
     # save data
-    torch.save(thetas[:n_train], path.join(args.data_dir, task, "theta_train.pt"))
-    torch.save(observations[:n_train], path.join(args.data_dir, task, "x_train.pt"))
+    print("Save data.")
+    torch.save(thetas[:n_train], path.join(args.data_dir, task_name, "theta_train.pt"))
+    torch.save(observations[:n_train], path.join(args.data_dir, task_name, "x_train.pt"))
     torch.save(
         thetas[n_train : n_train + n_val],
-        path.join(args.data_dir, task, "theta_val.pt"),
+        path.join(args.data_dir, task_name, "theta_val.pt"),
     )
     torch.save(
         observations[n_train : n_train + n_val],
-        path.join(args.data_dir, task, "x_val.pt"),
+        path.join(args.data_dir, task_name, "x_val.pt"),
     )
-    torch.save(thetas[n_train + n_val :], path.join(args.data_dir, task, "theta_test.pt"))
-    torch.save(observations[n_train + n_val :], path.join(args.data_dir, task, "x_test.pt"))
+    torch.save(thetas[n_train + n_val :], path.join(args.data_dir, task_name, "theta_test.pt"))
+    torch.save(observations[n_train + n_val :], path.join(args.data_dir, task_name, "x_test.pt"))
 
-    print(f"Saved data to '{path.join(args.data_dir, task)}'.")
+    print(f"Saved data to '{path.join(args.data_dir, task_name)}'.")
 
 
 if __name__ == "__main__":
@@ -63,7 +93,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task",
         type=str,
-        help="Task to generate data for. One of ['toy_example', 'lotka_volterra']",
+        help="Task to generate data for. One of ['toy_example', 'lotka_volterra', 'sir', 'linear_gaussian']",
+    )
+
+    parser.add_argument(
+        "--type",
+        type=str,
+        default="continuous",
+        help="Type of actions. One of ['binary', 'continuous']",
     )
 
     parser.add_argument("--ntrain", type=int, default=500000, help="Number of training samples")

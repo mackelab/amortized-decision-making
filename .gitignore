@@ -5,27 +5,26 @@ docs
 tests
 sbi-logs
 
-results_old/*
-results/*
-!results/lotka_volterra/
-results/lotka_volterra/*/
-!results/sir/
-results/sir/*/
-!results/toy_example/
-results/toy_example/*/
+# result folders
+results/*/*/nn/*
+checkpoints/
+
+# BVEP
+data_input_files
+results/bvep/results_epileptor*
+
 *.pt
 *.png
 *.pdf
 *.jpg
+*.gif
 !*.ipynb
-scripts/multirun/*
-scripts/outputs/*
-outputs
-multirun
 
 # hydra output files
-outputs/* 
+outputs/*
+scripts/outputs/* 
 multirun/*
+
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/venv,macos,linux,python,visualstudiocode,jupyternotebooks,text
