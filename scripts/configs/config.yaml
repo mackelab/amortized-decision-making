@@ -1,6 +1,7 @@
 defaults: 
 - _self_
 - task: toy_example
+- action: ???
 - model: fc
 
 seed: 0
