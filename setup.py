@@ -7,7 +7,7 @@ EMAIL = "mila.gorecki@student.uni-tuebingen.de"
 AUTHOR = "Mila Gorecki"
 REQUIRES_PYTHON = ">=3.6.0"
 
-REQUIRED = ["torch", "numpy", "matplotlib", "sbi", "sbibm"]
+REQUIRED = ["torch", "numpy", "matplotlib", "sbi", "diffeqtorch", "sbibm"]
 
 setup(
     name=NAME,
