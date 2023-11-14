@@ -28,6 +28,10 @@ def main(cfg: DictConfig):
     assert path.isdir(cfg.res_dir), "res_dir is no existing directory"
 
     task_name = cfg.task.name
+    action_type = cfg.action.type
+    num_actions = None if cfg.action.num_actions == "None" else int(cfg.action.num_actions)
+    probs = None if cfg.action.probs == "None" else list(cfg.action.probs)
+    task_specifications = {"action_type": action_type, "num_actions": num_actions, "probs": probs}
     assert task_name in [
         "toy_example",
         "sir",
@@ -69,15 +73,21 @@ def main(cfg: DictConfig):
         f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir}\n"
     )
 
+    print("Data shapes", x_train.shape, theta_train.shape)
     npe_posterior = train_npe(
-        task_name,
-        theta_train,
-        x_train,
+        task_name=task_name,
+        theta_train=theta_train,
+        x_train=x_train,
         neural_net=estimator,
         max_num_epochs=epochs,
         device=device,
         seed=seed,
+        **task_specifications,
     )
+
+    # test whether sampling works
+    npe_posterior.sample((1,), x=x_train[0], show_progress_bars=False)
+
     torch.save(
         npe_posterior,
         path.join(save_dir_seeded, f"{estimator}_n{ntrain}.pt"),

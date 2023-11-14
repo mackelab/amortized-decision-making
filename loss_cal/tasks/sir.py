@@ -13,7 +13,7 @@ _task = sbibm.get_task("sir")
 
 class SIR(BenchmarkTask):
     def __init__(self, action_type: str, num_actions: int = None, probs: List = None) -> None:
-        assert action_type in ["binary", "continuous"]
+        assert action_type in ["discrete", "continuous"]
 
         self.param_low = torch.Tensor([0.0, 0.0])
         self.param_high = torch.Tensor(
@@ -22,7 +22,7 @@ class SIR(BenchmarkTask):
         param_range = {"low": self.param_low, "high": self.param_high}
         parameter_aggegration = lambda params: torch.log((params[:, 0:1] / params[:, 1:]))
 
-        if action_type == "binary":
+        if action_type == "discrete":
             self.num_actions = num_actions
             self.probs = probs
             assert num_actions is not None

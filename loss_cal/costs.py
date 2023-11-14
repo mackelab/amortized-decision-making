@@ -21,7 +21,7 @@ def get_costs(name: str):
 
 def RevGaussCost(
     parameter_range,
-    action_range=100,
+    action_range=None,
     factor: float = 1,
     exponential=1,
     max_val=10.0,
@@ -61,12 +61,65 @@ def RevGaussCost(
         if aligned:
             return 1 - torch.exp(
                 -((rescaled_theta - rescaled_action) ** 2)
-                / (factor / torch.abs(rescaled_theta + 0.5) ** exponential) ** 2
+                / (factor / (torch.abs(rescaled_theta) + 0.01) ** exponential)
             )
+            # return 1 - torch.exp(
+            #     -((rescaled_theta - rescaled_action) ** 2) / (factor / torch.abs(rescaled_theta + 0.5)) ** exponential
+            # )
         else:
             return 1 - torch.exp(
                 -((rescaled_theta - rescaled_action) ** 2)
-                / (factor / (max_val - rescaled_theta + 0.5) ** exponential) ** 2
+                / (factor / (torch.abs(max_val - rescaled_theta) + 0.01) ** exponential)
+            )
+
+    return cost_fn
+
+
+def LinearCost(
+    parameter_range,
+    action_range=None,
+    factor: float = 1,
+    max_val=10.0,
+    offset=0,
+    aligned=True,
+):
+    """Reverse Gaussian cost function
+
+    Args:
+        factor (float, optional): Factor to influence the std of the Gaussian. Defaults to 0.75.
+
+    Returns:
+        function : cost function cost(theta, action)
+    """
+
+    def cost_fn(
+        true_theta: torch.Tensor or float,
+        action: torch.Tensor or float,
+    ):
+        """cost function
+
+        Args:
+            true_theta (torch.Tensor or float): true parameter values
+            action (torch.Tensor or float): actions
+
+        Returns:
+            torch.Tensor: incurred costs
+        """
+        assert isinstance(true_theta, torch.Tensor) or isinstance(
+            action, torch.Tensor
+        ), "One of the inputs has to be a torch.Tensor."
+
+        rescaled_theta = true_theta * max_val / parameter_range
+        rescaled_offset = offset * max_val / parameter_range
+        rescaled_action = action * max_val / action_range - rescaled_offset
+
+        if aligned:
+            return factor * rescaled_theta * torch.abs(rescaled_theta - rescaled_action)
+        else:
+            return (
+                factor
+                * (max_val - rescaled_theta)
+                * torch.abs(rescaled_theta - rescaled_action)
             )
 
     return cost_fn
@@ -104,6 +157,115 @@ def SquaredCost(factor: float = 5):
     return cost_fn
 
 
+def MultiClassCost(
+    theta_crit,
+    factors,
+    base_costs,
+    parameter_range,
+    action_range=100,
+    max_val=10.0,
+    offset=0,
+):
+    if factors is not None:
+        assert theta_crit.shape[0] == factors.shape[0]
+    else:
+        factors = torch.ones(theta_crit.shape[0], 2)
+    if base_costs is not None:
+        assert theta_crit.shape[0] == base_costs.shape[0]
+    else:
+        base_costs = torch.zeros(theta_crit.shape[0], 1)
+
+    # add an initial value with zero costs to avoid indexing issues (allow theta and a with multiple entries)
+    theta_crit = torch.concat(
+        [torch.Tensor([-(2**32)]), theta_crit]
+    )  # large negative, not inf
+    factors = torch.concat([torch.zeros((1, 2)), factors])
+    print(theta_crit)
+    print(factors)
+
+    def cost_fn(
+        true_theta: torch.Tensor or float,
+        action: torch.Tensor or float,
+    ):
+        """cost function
+
+        Args:
+            true_theta (torch.Tensor or float): true parameter values
+            action (torch.Tensor or float): actions
+
+        Returns:
+            torch.Tensor: incurred costs
+        """
+        assert isinstance(true_theta, torch.Tensor) or isinstance(
+            action, torch.Tensor
+        ), "One of the inputs has to be a torch.Tensor."
+
+        assert (
+            sum(action == a for a in torch.arange(0.0, len(theta_crit))).bool().all()
+        ), f"All actions have to be integers between 0 and {len(theta_crit)}."
+        idx = action.int()
+
+        rescaled_theta = true_theta * max_val / parameter_range
+        rescaled_offset = offset * max_val / parameter_range
+        # rescaled_action = action * max_val / action_range - rescaled_offset
+
+        costs = base_costs[idx] + factors[idx + 1, 1] * (
+            true_theta > theta_crit[idx + 1]
+        ) * torch.abs(
+            (true_theta - theta_crit[idx + 1])
+        )  # (1-torch.exp(-(thetas-theta_crit[i])**2))
+        costs = costs + factors[idx + 1, 0] * (
+            true_theta < theta_crit[idx]
+        ) * torch.abs(true_theta - theta_crit[idx])
+        # costs[idx > 0] = costs[idx > 0] + factors[idx[idx > 0], 0] * (
+        #     true_theta < theta_crit[idx[idx > 0] - 1]
+        # ) * torch.abs(true_theta - theta_crit[idx[idx > 0] - 1])
+        return costs
+
+    return cost_fn
+
+
+def MultiClass01Cost(
+    theta_crit,
+    parameter_range,
+    max_val=1.0,
+):
+    # add an initial value with zero costs to avoid indexing issues (allow theta and a with multiple entries)
+    theta_crit = torch.concat(
+        [torch.Tensor([-(2**32)]), theta_crit]
+    )  # large negative, not inf
+    print(theta_crit)
+
+    def cost_fn(
+        true_theta: torch.Tensor or float,
+        action: torch.Tensor or float,
+    ):
+        """cost function
+
+        Args:
+            true_theta (torch.Tensor or float): true parameter values
+            action (torch.Tensor or float): actions
+
+        Returns:
+            torch.Tensor: incurred costs
+        """
+        assert isinstance(true_theta, torch.Tensor) or isinstance(
+            action, torch.Tensor
+        ), "One of the inputs has to be a torch.Tensor."
+
+        assert (
+            sum(action == a for a in torch.arange(0.0, len(theta_crit))).bool().all()
+        ), f"All actions have to be integers between 0 and {len(theta_crit)}."
+        idx = action.int()
+
+        costs = (true_theta > theta_crit[idx + 1]).float() + (
+            true_theta < theta_crit[idx]
+        ).float()
+        return costs
+
+    return cost_fn
+
+
 def StepCost_weighted(weights: list, threshold: float):
     """Step function for binary classification
 
@@ -115,7 +277,9 @@ def StepCost_weighted(weights: list, threshold: float):
         function: cost function cost(theta, action)
     """
 
-    assert len(weights) == 2, f"Binary classification, expected 2 weights, got {len(weights)}"
+    assert (
+        len(weights) == 2
+    ), f"Binary classification, expected 2 weights, got {len(weights)}"
 
     def cost_fn(true_theta: torch.Tensor or float, action: torch.Tensor or float):
         """step function
@@ -133,11 +297,62 @@ def StepCost_weighted(weights: list, threshold: float):
         else:
             assert torch.logical_or(
                 action == 0.0, action == 1.0
-            ).all(), "All values have to be either 0 (below threshold) or  1(above treshold)"
+            ).all(), (
+                "All values have to be either 0 (below threshold) or  1(above treshold)"
+            )
 
         return (
-            action * (1 - torch.gt(true_theta, threshold).type(torch.float)) * weights[1]
-            + (1 - action) * torch.gt(true_theta, threshold).type(torch.float) * weights[0]
+            action
+            * (1 - torch.gt(true_theta, threshold).type(torch.float))
+            * weights[1]
+            + (1 - action)
+            * torch.gt(true_theta, threshold).type(torch.float)
+            * weights[0]
+        )
+
+    return cost_fn
+
+
+def SigmoidStepCost_weighted(weights: list, threshold: float):
+    """Step function for binary classification
+
+    Args:
+        weights (list): costs for each class (weights[0] = cost of FN, weights[1]=cost of FP)
+        threshold (float): decision threshold
+
+    Returns:
+        function: cost function cost(theta, action)
+    """
+
+    assert (
+        len(weights) == 2
+    ), f"Binary classification, expected 2 weights, got {len(weights)}"
+
+    def cost_fn(true_theta: torch.Tensor or float, action: torch.Tensor or float):
+        """step function
+
+        Args:
+            true_theta (torch.Tensororfloat): true parameter value
+            action (torch.Tensororfloat): action
+
+        Returns:
+            torch.Tensor: incurred costs
+        """
+
+        if type(action) == float or type(action) == int:
+            assert action == 0.0 or action == 1.0, "Decision has to be either 0 or 1"
+        else:
+            assert torch.logical_or(
+                action == 0.0, action == 1.0
+            ).all(), (
+                "All values have to be either 0 (below threshold) or  1(above treshold)"
+            )
+
+        return (
+            action
+            * (1 / (1 + torch.exp(weights[1] * (threshold - true_theta))))
+            * weights[1]
+            + (1 - action) * (1 / (1 + torch.exp(threshold - true_theta))) * weights[0]
         )
 
     return cost_fn
@@ -154,7 +369,9 @@ def LinearCost_weighted(weights: list, threshold: float):
         function: cost function cost(theta, action)
     """
 
-    assert len(weights) == 2, f"Binary classification, expected 2 weights, got {len(weights)}"
+    assert (
+        len(weights) == 2
+    ), f"Binary classification, expected 2 weights, got {len(weights)}"
 
     def cost_fn(true_theta: torch.Tensor or float, action: torch.Tensor or float):
         """step function
@@ -169,14 +386,26 @@ def LinearCost_weighted(weights: list, threshold: float):
         if type(action) == float or type(action) == int:
             assert action == 0.0 or action == 1.0, "Action has to be either 0 or 1"
         else:
-            assert true_theta.shape == action.shape, f"Shapes must match, got {true_theta.shape} and {action.shape}."
+            assert (
+                true_theta.shape == action.shape
+            ), f"Shapes must match, got {true_theta.shape} and {action.shape}."
             assert torch.logical_or(
                 action == 0.0, action == 1.0
-            ).all(), "All values have to be either 0 (below threshold) or  1(above treshold)"
+            ).all(), (
+                "All values have to be either 0 (below threshold) or  1(above treshold)"
+            )
 
-        return action * (1 - torch.gt(true_theta, threshold).type(torch.float)) * weights[1] * (
-            threshold - true_theta
-        ) + (1 - action) * torch.gt(true_theta, threshold).type(torch.float) * weights[0] * (true_theta - threshold)
+        return action * (
+            1 - torch.gt(true_theta, threshold).type(torch.float)
+        ) * weights[1] * (threshold - true_theta) + (1 - action) * torch.gt(
+            true_theta, threshold
+        ).type(
+            torch.float
+        ) * weights[
+            0
+        ] * (
+            true_theta - threshold
+        )
 
     return cost_fn
 
@@ -184,7 +413,9 @@ def LinearCost_weighted(weights: list, threshold: float):
 # TODO: check if used
 class SigmoidLoss_weighted:
     def __init__(self, weights, threshold) -> None:
-        assert len(weights) == 2, f"Binary classification, expected 2 values, got {len(weights)}"
+        assert (
+            len(weights) == 2
+        ), f"Binary classification, expected 2 values, got {len(weights)}"
         self.weights = weights
         self.threshold = threshold
 
@@ -201,15 +432,21 @@ class SigmoidLoss_weighted:
         """
 
         if type(decision) == float or type(decision) == int:
-            assert decision == 0.0 or decision == 1.0, "Decision has to be either 0 or 1"
+            assert (
+                decision == 0.0 or decision == 1.0
+            ), "Decision has to be either 0 or 1"
         else:
             assert torch.logical_or(
                 decision == 0.0, decision == 1.0
             ).all(), "All values have to be either 0 (below threshold) or  1 (above treshold)"
 
         return (
-            decision * (1 - torch.sigmoid(slope * (true_theta - self.threshold))) * self.weights[1]
-            + (1 - decision) * torch.sigmoid(slope * (true_theta - self.threshold)) * self.weights[0]
+            decision
+            * (1 - torch.sigmoid(slope * (true_theta - self.threshold)))
+            * self.weights[1]
+            + (1 - decision)
+            * torch.sigmoid(slope * (true_theta - self.threshold))
+            * self.weights[0]
         )
 
 
@@ -234,7 +471,9 @@ def BCELoss_weighted(weights: list, threshold: float, cost_fn: str = "step"):
         Returns:
             float: loss value
         """
-        assert prediction.shape == target.shape == theta.shape, "All arguments should have the same shape."
+        assert (
+            prediction.shape == target.shape == theta.shape
+        ), "All arguments should have the same shape."
         assert cost_fn in [
             "step",
             "linear",
@@ -247,9 +486,9 @@ def BCELoss_weighted(weights: list, threshold: float, cost_fn: str = "step"):
         costs = cost_functions[cost_fn]
 
         prediction = torch.clamp(prediction, min=1e-7, max=1 - 1e-7)
-        bce = -target * torch.log(prediction) * costs(theta, 0.0) - (1 - target) * torch.log(1 - prediction) * costs(
-            theta, 1.0
-        )
+        bce = -target * torch.log(prediction) * costs(theta, 0.0) - (
+            1 - target
+        ) * torch.log(1 - prediction) * costs(theta, 1.0)
         return bce
 
     return loss
@@ -279,7 +518,9 @@ def expected_posterior_costs_given_posterior_samples(
     # make sure tensors are 2D
     a = atleast_2d(a)
     if verbose and not (actions.is_valid(a)).all():
-        print("Some actions are invalid, expected costs with be inf for those actions. ")
+        print(
+            "Some actions are invalid, expected costs with be inf for those actions. "
+        )
 
     expected_costs = torch.empty_like(a)
     mask = actions.is_valid(a)

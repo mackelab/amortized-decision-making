@@ -115,8 +115,13 @@ def expected_costs_wrapper(
         expected_costs[:, inside_range] = nn(x.repeat(a_valid.shape[1], 1), a_valid.T).T
         # expected_costs[:, inside_range] = nn(x, a_valid)
     elif dist == "npe":
-        assert npe is not None, "Provide trained NPE to evaluate costs."
-        npe_samples = npe.sample((npe_samples,), x=x, show_progress_bars=show_progress_bars)
+        assert (npe is not None and type(npe_samples) == int) or (
+            type(npe_samples) == torch.Tensor
+        ), f"Provide trained NPE ({(npe is not None and type(npe_samples) == int)}) or samples ({type(npe_samples) == torch.Tensor}) to evaluate costs."
+        if type(npe_samples) == torch.Tensor:
+            pass  # print("Using provided samples")
+        else:
+            npe_samples = npe.sample((npe_samples,), x=x, show_progress_bars=show_progress_bars)
         expected_costs[:, inside_range] = expected_posterior_costs_given_posterior_samples(
             post_samples=task.param_aggregation(npe_samples),
             actions=task.actions,
@@ -142,8 +147,9 @@ def reverse_costs(
     npe_samples=1000,
     idx=None,
     show_progress_bars=False,
+    max_cost=1,
 ) -> torch.Tensor:
-    return 1 - expected_costs_wrapper(
+    return max_cost - expected_costs_wrapper(
         x=x,
         a=a,
         task=task,
@@ -172,6 +178,7 @@ def find_optimal_action(
     num_initial_actions=100,
     idx=None,
     show_progress_bars=False,
+    max_cost=1,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     assert dist in ["posterior", "nn", "npe"]
     if task.task_name != "toy_example":
@@ -191,6 +198,7 @@ def find_optimal_action(
         verbose=verbose,
         idx=idx,
         show_progress_bars=show_progress_bars,
+        max_cost=max_cost,
     )
 
     best_action, estimated_costs = gradient_ascent(
