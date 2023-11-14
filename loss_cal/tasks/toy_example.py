@@ -20,7 +20,7 @@ class ToyExample(Task):
         num_actions: int = None,
         probs: List = None,
     ) -> None:
-        assert action_type in ["binary", "continuous"]
+        assert action_type in ["discrete", "continuous"]
 
         prior_params = {
             "low": Tensor([low]),
@@ -34,7 +34,7 @@ class ToyExample(Task):
         self.simulator_mean = lambda theta: 50 + 0.5 * theta * (5 - theta) ** 4
         self.simulator_std = 10.0
 
-        if action_type == "binary":
+        if action_type == "discrete":
             self.num_actions = num_actions
             self.probs = probs
             assert num_actions is not None
@@ -177,9 +177,6 @@ class ToyExample(Task):
         x_o: Tensor,
         a_grid: Tensor,
         cost_fn: Callable,
-        lower: float = 0.0,
-        upper: float = 5.0,
-        resolution: int = 500,
     ) -> float:
         """Compute the Bayes optimal action under the ground truth posterior
 
@@ -194,41 +191,10 @@ class ToyExample(Task):
         Returns:
             float: action with minimal incurred costs
         """
-        losses = torch.tensor([self.expected_posterior_costs(x=x_o, a=a, lower=lower, cost_fn=cost_fn) for a in a_grid])
-        return a_grid[losses.argmin()]
+        costs = torch.tensor([self.expected_posterior_costs(x=x_o, a=a, cost_fn=cost_fn) for a in a_grid])
+        return a_grid[costs.argmin()]
 
     ## Functions relevant for binary actions only
-    def expected_posterior_costs_binary(
-        self,
-        x_o: Tensor,
-        cost_fn: Callable = StepCost_weighted(weights=[5.0, 1.0], threshold=2.0),
-    ) -> Tuple[Tensor, Tensor]:
-        """Compute expected costs under the posterior
-
-        Args:
-            x_o (Tensor): observation, conditional of posterior p(theta|x_o)
-            lower (float, optional): lower bound of the parameter grid/integral. Defaults to 0.0.
-            upper (float, optional): upper bound of the parameter grid/inetgral. Defaults to 5.0.
-            resolution (int, optional): number of evaluation points. Defaults to 500.
-            cost_fn (Callable, optional): cost function to compute incurred costs. Defaults to StepCost_weighted(weights=[5.0, 1.0], threshold=2.0).
-
-        Returns:
-            Tuple[Tensor, Tensor]: costs incurred when taking action 0, costs incurred when taking action 1
-        """
-        resolution = 1000
-        theta_grid = torch.linspace(self.param_low.item(), self.param_high.item(), resolution).unsqueeze(1)
-        post = self.gt_posterior(x_o)
-        incurred_costs_action0 = cost_fn(theta_grid, 0)  # predicting 0 (FN)
-        incurred_costs_action1 = cost_fn(theta_grid, 1)  # predicting 1 (FP)
-        # expected posterior costs
-        expected_costs_action0 = (
-            post * incurred_costs_action0 * (self.param_high.item() - self.param_low.item()) / (resolution - 1)
-        ).sum()
-        expected_costs_action1 = (
-            post * incurred_costs_action1 * (self.param_high.item() - self.param_low.item()) / (resolution - 1)
-        ).sum()
-        return expected_costs_action0, expected_costs_action1
-
     def bayes_optimal_action_binary(
         self,
         x_o: Tensor,
@@ -247,14 +213,11 @@ class ToyExample(Task):
         Returns:
             float: action with minimal incurred costs
         """
-        costs_action0, costs_action1 = self.expected_posterior_costs_binary(x_o=x_o, cost_fn=cost_fn)
-        return (costs_action0 > costs_action1).float()
+        expected_costs0 = self.expected_posterior_costs(x=x_o, a=torch.zeros((1, 1)), cost_fn=cost_fn)
+        expected_costs1 = self.expected_posterior_costs(x=x_o, a=torch.ones((1, 1)), cost_fn=cost_fn)
+        return (expected_costs0 > expected_costs1).float()
 
-    def posterior_ratio_binary(
-        self,
-        x_o: Tensor,
-        cost_fn: Callable = StepCost_weighted(weights=[5.0, 1.0], threshold=2.0),
-    ) -> float:
+    def posterior_ratio_binary(self, x_o: Tensor, cost_fn: Callable[..., Any]) -> float:
         """Compute the posterior ratio: (exp. costs taking action 0)/(exp. costs taking action 0 + exp. costs taking action 1)
 
         Args:
@@ -266,14 +229,15 @@ class ToyExample(Task):
         Returns:
             float: posterior ratio
         """
-        int_0, int_1 = self.expected_posterior_costs_binary(x_o=x_o, cost_fn=cost_fn)
-        return int_0 / (int_0 + int_1)
+        expected_costs0 = self.expected_posterior_costs(x=x_o, a=torch.zeros((1, 1)), cost_fn=cost_fn)
+        expected_costs1 = self.expected_posterior_costs(x=x_o, a=torch.ones((1, 1)), cost_fn=cost_fn)
+        return expected_costs0 / (expected_costs0 + expected_costs1)
 
     def posterior_ratio_binary_given_posterior(
         self,
         posterior: Callable,
         x_o: Tensor,
-        cost_fn: Callable = StepCost_weighted(weights=[5.0, 1.0], threshold=2.0),
+        cost_fn: Callable,
     ):
         """Compute the posterior ratio for a given posterior: (exp. costs taking action 0)/(exp. costs taking action 0 + exp. costs taking action 1)
 

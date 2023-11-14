@@ -13,13 +13,13 @@ def main(args):
         "sir",
         "lotka_volterra",
     ], "Choose one of 'sir' or 'lotka_volterra'."
-    assert action_type in ["binary", "continuous"], "Specifiy the type of actions, one of 'binary' or 'continuous'."
+    assert action_type in ["discrete", "continuous"], "Specifiy the type of actions, one of 'discrete' or 'continuous'."
     print("Task: ", task_name)
 
     # tresholds
     # if  task_name == "toy_example":
 
-    if action_type == "binary":
+    if action_type == "discrete":
         if task_name == "lotka_volterra":
             labels = ["alpha", "beta", "gamma", "delta"]
             thresholds_alpha = torch.linspace(0.2, 1.7, 16)

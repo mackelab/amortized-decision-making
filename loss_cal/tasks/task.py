@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import sbibm
 import torch
+from sbi.inference import prepare_for_sbi, simulate_for_sbi
 from sbi.utils.torchutils import atleast_2d
 from sbibm.algorithms.sbi.utils import wrap_prior_dist, wrap_simulator_fn
 from torch import Tensor
@@ -25,7 +26,7 @@ class Task:
         parameter_aggregation: Callable,
         name_display: Optional[str] = None,
     ) -> None:
-        assert action_type in ["binary", "continuous"]
+        assert action_type in ["discrete", "continuous"]
 
         self.task_name = name
         self.display_name = name_display if name_display is not None else name
@@ -100,20 +101,24 @@ class Task:
         nval: int,
         base_dir="./data",
         save_data=True,
-        show_progress=False,
+        show_progress=True,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         dir = path.join(base_dir, self.task_name)
 
         n = ntrain + ntest + nval
-        thetas = self.sample_prior(n=n)
-        if show_progress:
-            xs = torch.empty((n, self.dim_data))
-            simulator = self.get_simulator()
-            for i, th in enumerate(thetas):
-                xs[i, :] = simulator(theta=th)
-                print(f"{i}/{n}", end="\r")
-        else:
-            xs = self.sample_simulator(theta=thetas)
+        prior = self.get_prior()
+        simulator = self.get_simulator()
+        simulator, prior = prepare_for_sbi(simulator, prior)
+        thetas, xs = simulate_for_sbi(simulator, proposal=prior, num_simulations=n, show_progress_bar=show_progress)
+        # thetas = self.sample_prior(n=n)
+        # if show_progress:
+        #     xs = torch.empty((n, self.dim_data))
+        #     simulator = self.get_simulator()
+        #     for i, th in enumerate(thetas):
+        #         xs[i, :] = simulator(theta=th)
+        #         print(f"{i}/{n}", end="\r")
+        # else:
+        #     xs = self.sample_simulator(theta=thetas)
 
         theta_train = thetas[:ntrain]
         x_train = xs[:ntrain]

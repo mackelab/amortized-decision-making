@@ -10,6 +10,7 @@ from sbi.utils.get_nn_models import posterior_nn
 from sbi.utils.sbiutils import seed_all_backends
 from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
 
+from loss_cal.tasks import get_task
 from loss_cal.tasks.bvep import BVEP
 
 # from loss_cal.tasks.linear_gaussian import LinearGauss
@@ -31,6 +32,7 @@ def train_npe(
     max_num_epochs: Optional[int] = 2**31 - 1,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     seed=0,
+    **kwargs,
 ):
     assert (
         task_name in ["toy_example", "linear_gaussian", "bvep"] + sbibm.get_available_tasks()
@@ -49,28 +51,36 @@ def train_npe(
         training_batch_size = num_simulations
         log.warn("Reduced training_batch_size to num_simulations")
 
-    if task_name == "toy_example":
-        toy = ToyExample()
-        prior = toy.get_prior()
-    elif task_name == "linear_gaussian":
-        task = sbibm.get_task("gaussian_linear")
-        prior = task.get_prior_dist()
-
-        transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+    task = get_task(task_name, **kwargs)
+    prior = task.get_prior_dist()
+    if task_name not in ["linear_gaussian", "toy_example", "bvep"]:
+        transforms = task._task._get_transforms(automatic_transforms_enabled)["parameters"]
 
         if automatic_transforms_enabled:
             prior = wrap_prior_dist(prior, transforms)
-    elif task_name == "bvep":
-        bvep = BVEP(action_type="binary", num_actions=2)
-        prior = bvep.get_prior()
-    else:
-        task = sbibm.get_task(task_name)
-        prior = task.get_prior_dist()
 
-        transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+    # if task_name == "toy_example":
+    #     toy = ToyExample(action_type=action_type)
+    #     prior = toy.get_prior()
+    # elif task_name == "linear_gaussian":
+    #     task = sbibm.get_task("gaussian_linear")
+    #     prior = task.get_prior_dist()
 
-        if automatic_transforms_enabled:
-            prior = wrap_prior_dist(prior, transforms)
+    #     transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+
+    #     if automatic_transforms_enabled:
+    #         prior = wrap_prior_dist(prior, transforms)
+    # elif task_name == "bvep":
+    #     bvep = BVEP(action_type=action_type, num_actions=2)
+    #     prior = bvep.get_prior()
+    # else:
+    #     task = sbibm.get_task(task_name)
+    #     prior = task.get_prior_dist()
+
+    #     transforms = task._get_transforms(automatic_transforms_enabled)["parameters"]
+
+    #     if automatic_transforms_enabled:
+    #         prior = wrap_prior_dist(prior, transforms)
 
     density_estimator_fun = posterior_nn(
         model=neural_net.lower(),
@@ -92,7 +102,7 @@ def train_npe(
         show_train_summary=True,
         max_num_epochs=max_num_epochs,
     )
-    posterior = inference_method.build_posterior(density_estimator)
+    posterior = inference_method.build_posterior(density_estimator)  # , sample_with="mcmc")
 
     if task_name not in ["linear_gaussian", "toy_example", "bvep"]:
         posterior_wrapped = wrap_posterior(posterior, transforms)

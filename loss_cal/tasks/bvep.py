@@ -1,16 +1,20 @@
+import sys
 from os import path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# sys.path.append("./../BVEP/SBI")
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
 import sbibm
 import torch
+
+# from BVEP_stat_summary import calculate_summary_statistics_features
 from sbi.utils import BoxUniform
 from sbi.utils.torchutils import atleast_2d
-from sbibm.algorithms.sbi.utils import wrap_prior_dist, wrap_simulator_fn
-from scipy import stats as spstats
+from scipy import signal
 from scipy.optimize import fsolve, root
+from scipy.signal import find_peaks, hilbert, savgol_filter
 from scipy.stats import kurtosis, mode, moment, skew
 from torch import Tensor
 from torch.distributions import Normal
@@ -21,37 +25,42 @@ from loss_cal.tasks.task import Task
 
 
 class BVEP(Task):
-    def __init__(
-        self,
-        action_type: str,
-        num_actions: int = None,
-        probs: List = None,
-    ) -> None:
-        assert action_type in ["binary", "continuous"]
+    def __init__(self, action_type: str, num_actions: int = None, probs: List = None, simulator="2D") -> None:
+        assert action_type in ["discrete", "continuous"]
 
         # 6D Epileptor
-        # prior_params = {
-        #     "low": Tensor([-5.0, 2800.0]),
-        #     "high": Tensor([0.0, 3000.0]),
-        # }
-        # self.param_low, self.param_high = prior_params["low"], prior_params["high"]
-        # param_range = {"low": self.param_low, "high": self.param_high}
-        # self.parameter_names = ["\eta", "\tau_0"]
+        if simulator == "6D":
+            prior_params = {
+                "low": Tensor([-5.0, 2800.0]),
+                "high": Tensor([0.0, 3000.0]),
+            }
+            self.param_low, self.param_high = prior_params["low"], prior_params["high"]
+            param_range = {"low": self.param_low, "high": self.param_high}
+            self.parameter_names = ["\eta", "\tau_0"]
+            dim_data = 800002
+            self.simulator = self.simulator6D()
 
-        prior_params = {
-            "low": Tensor([-5.0, 0.1, -5.0, 0.0]),
-            "high": Tensor([0.0, 50.0, 0.0, 5.0]),
-        }
-        self.param_low, self.param_high = prior_params["low"], prior_params["high"]
-        param_range = {"low": self.param_low, "high": self.param_high}
-        self.parameter_names = ["\eta", "\tau", "x_{init}", "z_{init}"]
+        elif simulator == "2D":
+            prior_params = {
+                "low": Tensor([-5.0, 0.1, -5.0, 0.0]),
+                "high": Tensor([0.0, 50.0, 0.0, 5.0]),
+            }
+            self.param_low, self.param_high = prior_params["low"], prior_params["high"]
+            param_range = {"low": self.param_low, "high": self.param_high}
+            self.parameter_names = ["\eta", "\tau", "x_{init}", "z_{init}"]
+            dim_data = 4
+            self.simulator = self.simulator2Dsummstats()
+
+        else:
+            print("Simulator not defined.")
+            raise (NotImplementedError)
 
         parameter_aggregation = lambda params: params
         prior_dist = BoxUniform(**prior_params)
 
-        if action_type == "binary":
+        if action_type == "discrete":
             self.num_actions = num_actions
-            self.probs = probs
+            self.probs = probs  # ! can be None
             assert num_actions is not None
             actions = CategoricalAction(num_actions=num_actions, probs=probs)
         else:
@@ -63,7 +72,7 @@ class BVEP(Task):
             "bvep",
             action_type,
             actions,
-            dim_data=4,  # 2D full: 2002,  # 6D: 8002,
+            dim_data=dim_data,
             dim_parameters=2,
             prior_params=prior_params,
             prior_dist=prior_dist,
@@ -72,7 +81,7 @@ class BVEP(Task):
             name_display="Bayesian Virtual Epileptic Patient",
         )
 
-    def simulator(self) -> Callable:
+    def simulator2D(self) -> Callable:
         def Epileptor2Dmodel(params, constants, sigma, dt, ts):
             eta, tau, x_init, z_init = params[0], params[1], params[2], params[3]
 
@@ -124,10 +133,72 @@ class BVEP(Task):
 
             states = Epileptor2Dmodel(params, constants, sigma, dt, ts)
 
-            summstats = torch.as_tensor(self.calculate_summary_statistics(states[0:nt], params, dt, ts, features=[]))
+            return states.reshape(-1)
+
+        return Epileptor2Dmodel_simulator_wrapper
+
+    def simulator2Dsummstats(self) -> Callable:
+        def Epileptor2Dmodel(
+            params, constants, sigma, dt, ts
+        ):  # in BVEP_Simulator.py/VEP2D_forwardmodel, the init conditions seem to be given, not learned as part of the parameters (?)
+            eta, tau, x_init, z_init = params[0], params[1], params[2], params[3]
+
+            eta.astype(float)
+            tau.astype(float)
+            x_init.astype(float)
+            z_init.astype(float)
+
+            # fixed parameters
+            I1 = constants[0]
+            nt = ts.shape[0]
+            dt = float(dt)
+            sigma = float(sigma)
+
+            # simulation from initial point
+            x = np.zeros(nt)  # fast voltage
+            z = np.zeros(nt)  # slow voltage
+            states = np.zeros((2, nt))
+
+            x[0] = float(x_init)
+            z[0] = float(z_init)
+
+            for i in range(1, nt):
+                dx = 1.0 - x[i - 1] ** 3 - 2.0 * x[i - 1] ** 2 - z[i - 1] + I1
+                dz = (1.0 / tau) * (4 * (x[i - 1] - eta) - z[i - 1])
+                x[i] = x[i - 1] + dt * dx + np.sqrt(dt) * sigma * np.random.randn()
+                z[i] = z[i - 1] + dt * dz + np.sqrt(dt) * sigma * np.random.randn()
+
+            states = np.concatenate((np.array(x).reshape(-1), np.array(z).reshape(-1)))
+
+            return states
+
+        Epileptor2Dmodel = numba.jit(Epileptor2Dmodel, nopython=False)
+
+        def Epileptor2Dmodel_simulator_wrapper(
+            params, features=["higher_moments", "power_envelope", "seizures_onset", "spectral_power", "amplitude_phase"]
+        ):
+            params = np.asarray(params)
+
+            # time step
+            T = 100.0
+            dt = 0.1
+            ts = np.arange(0, T + dt, dt)
+
+            # fixed parameters
+            I1 = 3.1
+            constants = np.array([I1])
+
+            sigma = 1e-1
+            nt = ts.shape[0]
+
+            states = Epileptor2Dmodel(params, constants, sigma, dt, ts)
+
+            summstats = torch.as_tensor(
+                # self.calculate_summary_statistics(states[0:nt], params, dt, ts, features=features)
+                self.calculate_summary_statistics(states[0:nt], ts.shape[0], features=features)
+            )
 
             return summstats
-            # return states.reshape(-1)
 
         return Epileptor2Dmodel_simulator_wrapper
 
@@ -142,8 +213,154 @@ class BVEP(Task):
         F[1] = 4 * (xx - eta) - zz
         return np.array([F[0], F[1]])
 
-    def calculate_summary_statistics(self, x, params, dt, ts, features):
-        """Calculate summary statistics
+    def calculate_summary_statistics(
+        self,
+        x,
+        nt,
+        features=["higher_moments", "power_envelope", "seizures_onset", "spectral_power", "amplitude_phase"],
+    ):
+        """Calculate summary statistics, copied and adapted from BVEP_stat_summary.py
+
+        Args:
+            x (np.array): observation
+            nt (int): number of time steps
+            features (list): list of strings secifying which features to calculate
+        """
+
+        nn = 1  # number of brain regions
+
+        X = x.reshape(-1, nt)  # (ns (=samples), nt (=timesteps))
+        ns = X.shape[0]
+        n_summary = 100 * nn
+
+        sum_stats_vec = np.concatenate(
+            (
+                np.mean(X, axis=1),
+                np.median(X, axis=1),
+                np.std(X, axis=1),
+                skew(X, axis=1),
+                kurtosis(X, axis=1),
+            )
+        )
+
+        for item in features:
+            if item == "higher_moments":
+                sum_stats_vec = np.concatenate(
+                    (
+                        sum_stats_vec,
+                        moment(X, moment=2, axis=1),
+                        moment(X, moment=3, axis=1),
+                        moment(X, moment=4, axis=1),
+                        moment(X, moment=5, axis=1),
+                        moment(X, moment=6, axis=1),
+                        moment(X, moment=7, axis=1),
+                        moment(X, moment=8, axis=1),
+                        moment(X, moment=9, axis=1),
+                        moment(X, moment=10, axis=1),
+                    )
+                )
+
+            elif item == "power_envelope":
+                X_area = np.trapz(X, dx=0.0001)
+                X_pwr = np.sum((X * X), axis=1)
+                X_pwr_n = X_pwr / X_pwr.max()
+
+                sum_stats_vec = np.concatenate(
+                    (
+                        sum_stats_vec,
+                        X_area,
+                        X_pwr,
+                        X_pwr_n,
+                    )
+                )
+
+            elif item == "seizures_onset":
+                seizures_num = []
+                seizures_on = []
+
+                for i in np.r_[0:ns]:  # unclear if 0:nn or 0:ns (inconsistent in original code)
+                    v = np.zeros(nt)
+                    Xhat = np.zeros(nt)
+                    Xhat = savgol_filter(X[i, :], 11, 3)
+
+                    v = np.array(Xhat)
+
+                    peaks, _ = find_peaks(v, height=0, rel_height=0.3, width=5)
+
+                    if peaks.shape[0] > 0:
+                        seizures_on.append(peaks[0])
+                    else:
+                        seizures_on.append(100000.0)
+
+                    seizures_num.append(peaks.shape[0])
+
+                sum_stats_vec = np.concatenate(
+                    (
+                        sum_stats_vec,
+                        np.array(seizures_num),
+                        np.array(seizures_on),
+                    )
+                )
+
+            elif item == "spectral_power":
+                fs = 10e3
+
+                f, Pxx_den = signal.periodogram(X, fs)
+
+                sum_stats_vec = np.concatenate(
+                    (
+                        sum_stats_vec,
+                        np.max(Pxx_den, axis=1),
+                        np.mean(Pxx_den, axis=1),
+                        np.median(Pxx_den, axis=1),
+                        np.std(Pxx_den, axis=1),
+                        skew(Pxx_den, axis=1),
+                        kurtosis(Pxx_den, axis=1),
+                        moment(Pxx_den, moment=2, axis=1),
+                        moment(Pxx_den, moment=3, axis=1),
+                        moment(Pxx_den, moment=4, axis=1),
+                        moment(Pxx_den, moment=5, axis=1),
+                        moment(Pxx_den, moment=6, axis=1),
+                        moment(Pxx_den, moment=2, axis=1),
+                        moment(Pxx_den, moment=3, axis=1),
+                        moment(Pxx_den, moment=4, axis=1),
+                        moment(Pxx_den, moment=5, axis=1),
+                        moment(Pxx_den, moment=6, axis=1),
+                        moment(Pxx_den, moment=7, axis=1),
+                        moment(Pxx_den, moment=8, axis=1),
+                        moment(Pxx_den, moment=9, axis=1),
+                        moment(Pxx_den, moment=10, axis=1),
+                        np.diag(np.dot(Pxx_den, Pxx_den.transpose())),
+                    )
+                )
+
+            elif item == "amplitude_phase":
+                analytic_signal = hilbert(X)
+                amplitude_envelope = np.abs(analytic_signal)
+                instantaneous_phase = np.unwrap(np.angle(analytic_signal))
+
+                sum_stats_vec = np.concatenate(
+                    (
+                        sum_stats_vec,
+                        np.mean(amplitude_envelope, axis=1),
+                        np.median(amplitude_envelope, axis=1),
+                        np.std(amplitude_envelope, axis=1),
+                        skew(amplitude_envelope, axis=1),
+                        kurtosis(amplitude_envelope, axis=1),
+                        np.mean(instantaneous_phase, axis=1),
+                        np.median(instantaneous_phase, axis=1),
+                        np.std(instantaneous_phase, axis=1),
+                        skew(instantaneous_phase, axis=1),
+                        kurtosis(instantaneous_phase, axis=1),
+                    )
+                )
+
+        sum_stats_vec = sum_stats_vec[0:n_summary]  # why is this getting shortened here?
+
+        return sum_stats_vec
+
+    def calculate_summary_statistics_notebook(self, x, params, dt, ts, features):
+        """Calculate summary statistics copied from Epileptor2D_sde_sbi_fitfeatures.ipynb
 
         Parameters
         ----------
@@ -157,6 +374,7 @@ class BVEP(Task):
         params.astype(float)
 
         n_summary = 100
+        nt = ts.shape[0]
 
         sum_stats_vec = np.concatenate(
             (
@@ -186,7 +404,7 @@ class BVEP(Task):
 
             if item == "seizures_onset":
                 # initialise array of seizure counts
-                nt = ts.shape[0]
+                # nt = ts.shape[0]
                 v = np.zeros(nt)
                 v = np.array(x)
 
@@ -325,7 +543,7 @@ class BVEP(Task):
         return self.prior_dist.sample((n,))
 
     def sample_simulator(self, theta: Tensor) -> Tensor:
-        return self.simulator()(theta)
+        return torch.as_tensor(self.simulator(theta))
 
     def evaluate_prior(self, theta: Tensor) -> Tensor:
         return self.prior_dist.log_prob(theta)

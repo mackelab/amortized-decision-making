@@ -12,7 +12,7 @@ import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
-from loss_cal.costs import RevGaussCost, StepCost_weighted
+from loss_cal.costs import MultiClass01Cost, RevGaussCost, StepCost_weighted
 from loss_cal.predictor import build_nn, train
 from loss_cal.tasks import get_task
 from loss_cal.utils.utils import load_data, prepare_for_training, save_metadata
@@ -31,13 +31,28 @@ def main(cfg: DictConfig):
         "sir",
         "lotka_volterra",
         "linear_gaussian",
-    ], "Choose one of 'toy_example', 'sir', 'lotka_volterra' or  'linear_gaussian."
-    task = get_task(task_name=task_name)
+        "bvep",
+    ], "Choose one of 'toy_example', 'sir', 'lotka_volterra', 'linear_gaussian' or 'bvep'."
+    action_type = cfg.action.type
+    if action_type == "discrete":
+        num_actions = (
+            None if cfg.action.num_actions == "None" else int(cfg.action.num_actions)
+        )
+        probs = None if cfg.action.probs == "None" else list(cfg.action.probs)
+        task_specifications = {
+            "action_type": action_type,
+            "num_actions": num_actions,
+            "probs": probs,
+        }
+    else:
+        task_specifications = {"action_type": action_type}
+
+    task = get_task(task_name=task_name, **task_specifications)
 
     model = cfg.model.type
     assert model in ["fc"], "Model type should be 'fc'."
 
-    seed = cfg.seed
+    seed = int(cfg.seed)
     seed_all_backends(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -61,19 +76,26 @@ def main(cfg: DictConfig):
             print("Task not defined without specified parameter!")
             raise (NotImplementedError)
     else:
-        parameter_range = (task.param_high[parameter] - task.param_low[parameter]).squeeze().item()
+        parameter_range = (
+            (task.param_high[parameter] - task.param_low[parameter]).squeeze().item()
+        )
     print("parameter_range", parameter_range)
-    action_range = task.action_high - task.action_low
-    action_type = cfg.action.type
     stop_after_epochs = cfg.model.stop_after_epochs
 
-    if action_type == "binary":
-        threshold = round(cfg.action.T, ndigits=4)
-        costs = list(cfg.action.costs)
-        cost_fn = StepCost_weighted(costs, threshold=threshold)
+    # if action_type == "discrete":
+    #     threshold = round(cfg.action.T, ndigits=4)
+    #     costs = list(cfg.action.costs)
+    #     cost_fn = StepCost_weighted(costs, threshold=threshold)
+    if action_type == "discrete":
+        theta_crit = torch.Tensor(list(cfg.action.T))
+        costs = torch.ones_like(theta_crit).tolist()
+        cost_fn = MultiClass01Cost(
+            theta_crit=theta_crit, parameter_range=parameter_range, max_val=1
+        )
     elif action_type == "continuous":
         factor = cfg.action.factor
         exponential = float(cfg.action.exponential)
+        action_range = task.action_high - task.action_low
         cost_fn = RevGaussCost(
             parameter_range=parameter_range,
             action_range=action_range,
@@ -83,15 +105,22 @@ def main(cfg: DictConfig):
             offset=offset,
         )
     else:
-        raise NotImplementedError(f"Provided type of action '{action_type}' not defined.")
+        raise NotImplementedError(
+            f"Provided type of action '{action_type}' not defined."
+        )
 
-    str_to_tranformation = {"ReLU": torch.nn.ReLU(), "Sigmoid": torch.nn.Sigmoid(), "Identity": torch.nn.Identity()}
+    str_to_tranformation = {
+        "ReLU": torch.nn.ReLU(),
+        "Sigmoid": torch.nn.Sigmoid(),
+        "Identity": torch.nn.Identity(),
+        "Softplus": torch.nn.Softplus(),
+    }
     assert (
         cfg.model.output_transform in str_to_tranformation.keys()
-    ), "Output transformation not implemented, one if ['ReLU', 'Sigmoid', 'Identity']."
+    ), "Output transformation not implemented, one if ['ReLU', 'Sigmoid', 'Identity', 'Softplus']."
     assert (
         cfg.model.activation in str_to_tranformation.keys()
-    ), "Output transformation not implemented, one if ['ReLU', 'Sigmoid', 'Identity']."
+    ), "Output transformation not implemented, one if ['ReLU', 'Sigmoid', 'Identity', 'Softplus']."
 
     hidden_layers = list(cfg.model.hidden)
     output_transform = str_to_tranformation[cfg.model.output_transform]
@@ -104,11 +133,13 @@ def main(cfg: DictConfig):
     ntrain = cfg.ntrain
     x_train, theta_train, x_val, theta_val = load_data_for_training(
         data_dir=cfg.data_dir,
-        task_name=task_name,
+        task=task,
         ntrain=ntrain,
         parameter=parameter,
         device=device,
     )
+
+    print("data shapes: ", x_train.shape, theta_train.shape)
 
     # create directory & save metadata
     save_dir = path.join(
@@ -118,14 +149,16 @@ def main(cfg: DictConfig):
         "nn",
         model,
         cfg.experiment,
-        seed
+        str(seed)
         #  " ".join([str(cfg.model.hidden).replace(", ", "-")[1:-1], cfg.model.output_transform]),
     )
     model_dir = prepare_for_training(
         base_dir=save_dir,
         parameter=parameter,
         action_type=action_type,
-        action_parameters=(round(threshold, ndigits=4), costs) if action_type == "binary" else (factor, exponential),
+        action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
+        if action_type == "discrete"
+        else (factor, exponential),
     )
     save_metadata(
         model_dir,
@@ -137,7 +170,9 @@ def main(cfg: DictConfig):
         z_scoring=z_scoring,
         parameter=parameter,
         action_type=action_type,
-        action_parameters=(threshold, costs) if action_type == "binary" else (factor, exponential),
+        action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
+        if action_type == "discrete"
+        else (factor, exponential),
         seed=seed,
         lr=learning_rate,
         ntrain=ntrain,
@@ -152,12 +187,15 @@ def main(cfg: DictConfig):
     nn = build_nn(
         model="fc",
         x_train=x_train,
-        action_train=task.actions.sample(x_train.shape[0]),  # sample actions to initialize Standardize layer
+        action_train=task.actions.sample(
+            x_train.shape[0]
+        ),  # sample actions to initialize Standardize layer
         hidden_dims=hidden_layers,
         output_dim=1,
         activation=activation_fn,
         output_transform=output_transform,
         z_scoring=z_scoring,
+        seed=seed,
     )
     print(nn, end="\n-----\n")
 
@@ -197,13 +235,11 @@ def main(cfg: DictConfig):
 
 def load_data_for_training(
     data_dir: str,
-    task_name: str,
+    task: str,
     ntrain: int,
     parameter: int,
     device: str,
 ):
-    task = get_task(task_name=task_name)
-
     (
         theta_train,
         x_train,
@@ -211,12 +247,16 @@ def load_data_for_training(
         x_val,
         _,
         _,
-    ) = load_data(task_name=task_name, base_dir=data_dir, device=device)
+    ) = load_data(task_name=task.task_name, base_dir=data_dir, device=device)
 
     theta_train = task.param_aggregation(theta_train)
     theta_val = task.param_aggregation(theta_val)
 
-    if parameter is not None and parameter >= 0 and parameter <= theta_train.shape[1] - 1:
+    if (
+        parameter is not None
+        and parameter >= 0
+        and parameter <= theta_train.shape[1] - 1
+    ):
         print(f"Restrict parameters to parameter {parameter}.")
         theta_train = theta_train[:, parameter : parameter + 1]
         theta_val = theta_val[:, parameter : parameter + 1]
@@ -226,28 +266,6 @@ def load_data_for_training(
     elif ntrain < theta_train.shape[0]:
         theta_train = theta_train[:ntrain]
         x_train = x_train[:ntrain]
-
-    # DOUBLE DATA TO ACCOMODATE BINARY ACTIONS
-    # if action_type == "binary":
-    #     costs_train = torch.concat(
-    #         [
-    #             cost_fn(theta_train, 0),
-    #             cost_fn(theta_train, 1),
-    #         ]
-    #     )
-
-    #     actions_train = torch.concat([torch.zeros((theta_train.shape[0], 1)), torch.ones((theta_train.shape[0], 1))])
-    #     theta_train = theta_train.repeat(2, 1)
-    #     x_train = x_train.repeat(2, 1)
-    #     costs_val = torch.concat(
-    #         [
-    #             cost_fn(theta_val, 0),
-    #             cost_fn(theta_val, 1),
-    #         ]
-    #     )
-    #     actions_val = torch.concat([torch.zeros((theta_val.shape[0], 1)), torch.ones((theta_val.shape[0], 1))])
-    #     theta_val = theta_val.repeat(2, 1)
-    #     x_val = x_val.repeat(2, 1)
 
     print("Data shapes train (x, theta):", x_train.shape, theta_train.shape)
     print("Data shapes val (x,theta):", x_val.shape, theta_val.shape)

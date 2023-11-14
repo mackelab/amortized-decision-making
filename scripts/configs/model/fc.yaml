@@ -1,6 +1,6 @@
 type: fc
 hidden: [50,50,50]
-output_transform: ReLU
+output_transform: Sigmoid
 activation: ReLU
 epochs: None
 lr: 1e-3
