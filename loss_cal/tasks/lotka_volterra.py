@@ -10,14 +10,13 @@ from loss_cal.actions import Action, CategoricalAction, UniformAction
 from loss_cal.tasks.task import BenchmarkTask
 
 
-## TODO: go through all function and adapt accordingly
 class LotkaVolterra(BenchmarkTask):
     def __init__(self, action_type: str, num_actions: int = None, probs: List = None) -> None:
         assert action_type in ["binary", "continuous"]
 
         self.param_low = torch.Tensor([0.0, 0.0, 0.0, 0.0])
         self.param_high = torch.Tensor(
-            [2.8241, 0.1593, 2.8241, 0.1593]
+            [4.1376, 0.2334, 4.1376, 0.2334]
         )  # based on where 99.9% of the mass of the prior are
         param_range = {"low": self.param_low, "high": self.param_high}
         parameter_aggegration = lambda params: params

@@ -4,7 +4,7 @@ defaults:
 - action: ???
 - model: fc
 
-seed: 0
+seed: ???
 ntrain: 50000
 data_dir: ../data/
 res_dir: ../results/

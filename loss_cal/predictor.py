@@ -1,5 +1,6 @@
 import glob
 import json
+import time
 from copy import deepcopy
 from os import path
 from typing import Callable, Dict, Iterable, Optional, Tuple, Union
@@ -14,8 +15,9 @@ from loss_cal.actions import Action
 from loss_cal.tasks import get_task
 from loss_cal.utils.utils import atleast_2d_col, create_checkpoint_dir, load_data
 
+# from loss_cal.costs import BCELoss_weighted
 
-# TODO: Check forward pass (are actions included?)
+
 class FeedforwardNN(nn.Module):
     def __init__(
         self,
@@ -70,6 +72,9 @@ class FeedforwardNN(nn.Module):
             [nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(hidden_dims[:-1], hidden_dims[1:])]
         )
         self.final_layer = nn.Linear(hidden_dims[-1], output_dim)
+        # if output_transform == nn.ReLU():
+        #     torch.nn.init.kaiming_normal_(self.final_layer.weight.data, nonlinearity="relu")
+        #     torch.nn.init.kaiming_normal_(self.final_layer.bias.data, nonlinearity="relu")
 
         # Activation function
         self.activation = activation
@@ -104,7 +109,7 @@ class FeedforwardNN(nn.Module):
         out = self.input_layer(input)
         out = self.activation(out)
 
-        for layer in self.hidden_layers:
+        for i, layer in enumerate(self.hidden_layers):
             out = layer(out)
             # out = nn.BatchNorm1d(out)
             out = self.activation(out)
@@ -115,7 +120,7 @@ class FeedforwardNN(nn.Module):
         return out
 
 
-def get_mean_and_std(z_scoring: str, data_train: torch.Tensor, min_std: float = 1e-14):
+def get_mean_and_std(z_scoring: str, data_train: torch.Tensor, eps: float = 1e-14):
     """Compute mean and standard deviatiation frome the training data/
 
     Args:
@@ -129,11 +134,12 @@ def get_mean_and_std(z_scoring: str, data_train: torch.Tensor, min_std: float = 
     assert z_scoring.capitalize() in ["None", "Independent", "Structured"]
     if z_scoring == "Independent":
         std = data_train.std(dim=0)
-        std[std < min_std] = min_std
+        # set small std to 1., not eps (https://github.com/scikit-learn/scikit-learn/blob/7389dbac82d362f296dc2746f10e43ffa1615660/sklearn/preprocessing/data.py#L70)
+        std[std < eps] = 1.0
         return data_train.mean(dim=0), std
     elif z_scoring == "Structured":
         std = data_train.std()
-        std[std < min_std] = min_std
+        std[std < eps] = eps
         return data_train.mean(), std
     else:
         return torch.zeros(1), torch.ones(1)
@@ -151,6 +157,7 @@ def build_nn(
     z_scoring: Optional[str] = "Independent",
     mean=Optional[float],
     std=Optional[float],
+    seed=0,
 ):
     """Wrapper function to prepare the z-scoring and adapt the input size to the training data
 
@@ -188,7 +195,8 @@ def build_nn(
         raise ValueError("Invalid z-scoring option, use 'None', 'Independent', 'Structured'.")
 
     if model == "fc":
-        clf = FeedforwardNN(
+        seed_all_backends(seed)
+        neural_net = FeedforwardNN(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
             output_dim=output_dim,
@@ -200,7 +208,7 @@ def build_nn(
         )
     else:
         raise NotImplementedError
-    return clf
+    return neural_net
 
 
 # TODO
@@ -215,14 +223,15 @@ def train(
     stop_after_epochs: int = 50,
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
-    batch_size: int = 5000,
+    batch_size: int = 500,
     resume_training: bool = False,
     ckp_path: str = None,
-    ckp_interval: int = 30,  # 20,
+    ckp_interval: int = 20,
     model_dir: str = None,
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     seed=0,
     shuffle_data=True,
+    save_sampled_actions=False,
 ) -> Tuple[nn.Module, torch.Tensor, torch.Tensor]:
     """Training loop to train a model until convergence with L2 loss.
 
@@ -287,39 +296,35 @@ def train(
     model.to(device)
 
     while epoch <= max_num_epochs:
-        # print("----" * 5)
-        # print("epoch ", epoch)
-        # print("----" * 5)
+        # print("-----" * 5)
+        # print(f"Epoch {epoch}")
+        # print("-----" * 5)
         train_loss_sum = 0.0
         model.train()
 
-        action_loader = DataLoader(
-            TensorDataset(actions.sample(x_train.shape[0])), batch_size=batch_size, shuffle=shuffle_data
-        )
+        actions_epoch = actions.sample(x_train.shape[0])
+        action_loader = DataLoader(TensorDataset(actions_epoch), batch_size=batch_size, shuffle=shuffle_data)
         for (x_batch, theta_batch), (a_batch,) in zip(train_loader, action_loader):
-            # print(f"Shapes training batches, x: {x_batch.shape}\t theta: {theta_batch.shape}\t a: {a_batch.shape}")
+            # print("x_batch", x_batch[:5])
+            # print("theta_batch", theta_batch[:5])
+            # print("a_batch", a_batch[:5])
             optimizer.zero_grad()
 
             predictions = model(x_batch, a_batch)
 
             # L2 loss
-            # print("Compute costs")
-            # print(f"theta: {theta_batch}\na: {a_batch}")
             costs_batch = cost_fn(theta_batch, a_batch)
-            # print(f"costs: {costs_batch.shape}, predictions: {predictions.shape}")
-            # print(f"costs:\n{costs_batch}\n")
-            # print(f"predictions:\n{predictions}")
-            batch_loss = ((costs_batch - predictions) ** 2).sum(dim=0)
-            # print(f"batch_loss: {batch_loss.shape}")
-            # print(f"batch_loss:\n{batch_loss}\n\n")
-
+            batch_loss = ((costs_batch - predictions) ** 2).mean(dim=0)
+            # batch_loss = BCELoss_weighted(weights=[5.0, 1.0], threshold=2.0)(
+            #     prediction=predictions, target=costs_batch, theta=theta_batch
+            # ).mean(dim=0)
             train_loss_sum += batch_loss.item()
 
             batch_loss.backward()
             optimizer.step()
 
         epoch += 1
-        avg_train_loss = train_loss_sum / x_train.shape[0]
+        avg_train_loss = train_loss_sum / len(train_loader)
         _summary["training_losses"].append(avg_train_loss)
 
         # check validation performance
@@ -333,10 +338,13 @@ def train(
             for (x_val_batch, theta_val_batch), (a_val_batch,) in zip(val_loader, action_val_loader):
                 val_preds_batch = model(x_val_batch, a_val_batch)
                 val_costs_batch = cost_fn(theta_val_batch, a_val_batch)
-                val_batch_loss = ((val_costs_batch - val_preds_batch) ** 2).sum(dim=0)
+                val_batch_loss = ((val_costs_batch - val_preds_batch) ** 2).mean(dim=0)
+                # val_batch_loss = BCELoss_weighted(weights=[5.0, 1.0], threshold=2.0)(
+                #     prediction=val_preds_batch, target=val_costs_batch, theta=theta_val_batch
+                # ).mean(dim=0)
                 val_loss_sum += val_batch_loss.item()
 
-        avg_val_loss = val_loss_sum / x_val.shape[0]
+        avg_val_loss = val_loss_sum / len(val_loader)
         _summary["validation_losses"].append(avg_val_loss)
 
         (
@@ -369,11 +377,15 @@ def train(
 
             save_checkpoint(checkpoint, is_best, ckp_interval, model_dir)
 
-        if epoch % ckp_interval == 0:
-            print(
-                f"{epoch}\t val_loss = {avg_val_loss:.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
-                end="\r",
-            )
+        if save_sampled_actions:
+            torch.save(x_train, path.join(model_dir, "actions", f"xtrain_e{epoch}.pt"))
+            torch.save(actions_epoch, path.join(model_dir, "actions", f"actions_e{epoch}.pt"))
+
+        # if epoch % ckp_interval == 0:
+        print(
+            f"{epoch}\t val_loss = {avg_val_loss:.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
+            end="\r",
+        )
         if converged:
             print(f"Converged after {epoch} epochs.")
             break
@@ -485,7 +497,9 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer):
 def load_predictors(
     task_name,
     dir,
+    data_dir=None,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    **task_specifications,
 ):
     # load data
     (
@@ -495,7 +509,8 @@ def load_predictors(
         _,
         _,
         _,
-    ) = load_data(task_name, device=device)
+    ) = load_data(task_name, device=device, base_dir=data_dir)
+
     model_files = glob.glob(path.join(dir, "best_model.pt"))
     metadata_files = [json.load(open(f.split("best_model.pt")[0] + "metadata.json")) for f in model_files]
 
@@ -516,7 +531,12 @@ def load_predictors(
     )
 
     print(f"Loading models:")
-    str_to_tranformation = {"ReLU": torch.nn.ReLU(), "Sigmoid": torch.nn.Sigmoid(), "Identity": torch.nn.Identity()}
+    str_to_tranformation = {
+        "ReLU": torch.nn.ReLU(),
+        "Sigmoid": torch.nn.Sigmoid(),
+        "Identity": torch.nn.Identity(),
+        "Softplus": torch.nn.Softplus(),
+    }
     models = []
     num_simulations = []
 
@@ -531,7 +551,7 @@ def load_predictors(
         activation = str_to_tranformation[metadata["activation"]]
         output_transform = str_to_tranformation[metadata["output_transform"]]
 
-        actions = get_task(task_name).actions
+        actions = get_task(task_name, **task_specifications).actions
         model = build_nn(
             model=metadata["model"],
             x_train=x_train,

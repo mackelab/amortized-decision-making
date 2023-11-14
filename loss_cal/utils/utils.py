@@ -84,15 +84,16 @@ def prepare_for_training(
         str: _description_
     """
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
-    assert action_type in {"binary", "continuous"}, "Type of actions has to be one of 'binary' and 'continuous'."
+    assert action_type in {"discrete", "continuous"}, "Type of actions has to be one of 'discrete' and 'continuous'."
     to_str = (
         lambda n: str(int(n)) if type(n) == int or (type(n) == float and n.is_integer()) else str(n).replace(".", "_")
     )
-    if action_type == "binary":
+    if action_type == "discrete":
         threshold, costs = action_parameters
         model_dir = path.join(
             base_dir,
-            f"{timestamp}_param_{parameter}_threshold_{to_str(threshold)}_costs_{to_str(costs[0])}_{to_str(costs[1])}",
+            # f"{timestamp}_param_{parameter}_threshold_{to_str(threshold)}_costs_{to_str(costs[0])}_{to_str(costs[1])}",
+            f"{timestamp}_param_{parameter}_threshold_{'_'.join([to_str(t) for t in threshold])}_costs_{'_'.join([to_str(c) for c in costs])}",
         )
     else:
         factor, exponential = action_parameters
@@ -157,14 +158,14 @@ def save_metadata(
     epochs: int,
     data_dir=str,
 ):
-    assert action_type in ["binary", "continuous"], "Specifiy the type of actions, one of 'binary' or 'continuous'."
+    assert action_type in ["discrete", "continuous"], "Specifiy the type of actions, one of 'discrete' or 'continuous'."
 
     metadata = {
         "seed": seed,
         "model": model,
         "architecture": f"{input}-{'-'.join(map(str, hidden_layers))}-1",
-        "output_transform": str(output_transform)[:-2],  # remove brackets
-        "activation": str(activation)[:-2],  # remove brackets
+        "output_transform": str(output_transform).split("(")[0],  # remove brackets
+        "activation": str(activation).split("(")[0],  # remove brackets
         "z_scoring": z_scoring,
         "optimizer": "Adam",
         "learning_rate": lr,
@@ -175,7 +176,7 @@ def save_metadata(
         "data_dir": data_dir,
     }
 
-    if action_type == "binary":
+    if action_type == "discrete":
         T, costs = action_parameters
         metadata.update({"threshold": T, "costs": costs})
     if action_type == "continuous":

@@ -25,7 +25,7 @@ def main(args):
     # print(f"Current directory: {getcwd()}")
 
     assert task_name in ["toy_example", "lotka_volterra", "sir", "linear_gaussian"]
-    assert action_type in ["binary", "continuous"]
+    assert action_type in ["discrete", "continuous"]
 
     if task_name == "toy_example":
         task = ToyExample()
@@ -62,7 +62,7 @@ def main(args):
     observations = torch.vstack(observations)
     print(observations.shape)
 
-    if action_type != "binary":
+    if action_type != "discrete":
         print("Sample actions.")
         actions = actions.sample(thetas.shape[0])
         torch.save(actions[:n_train], path.join(args.data_dir, task_name, "actions_train.pt"))
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         "--type",
         type=str,
         default="continuous",
-        help="Type of actions. One of ['binary', 'continuous']",
+        help="Type of actions. One of ['discrete', 'continuous']",
     )
 
     parser.add_argument("--ntrain", type=int, default=500000, help="Number of training samples")

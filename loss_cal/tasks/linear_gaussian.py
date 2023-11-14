@@ -21,7 +21,7 @@ class LinGauss(BenchmarkTask):
         param_range = {"low": self.param_low, "high": self.param_high}
         parameter_aggegration = lambda params: torch.mean(params, dim=1).unsqueeze(1)
 
-        if action_type == "binary":
+        if action_type == "discrete":
             self.num_actions = num_actions
             self.probs = probs
             assert num_actions is not None
