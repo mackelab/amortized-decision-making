@@ -1,3 +1,5 @@
 type: continuous
 factor: 1
 exponential: 2
+aligned: True
+offset: 0.0

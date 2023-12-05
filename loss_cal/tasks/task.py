@@ -25,6 +25,7 @@ class Task:
         param_range: Dict[str, Tensor],
         parameter_aggregation: Callable,
         name_display: Optional[str] = None,
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ) -> None:
         assert action_type in ["discrete", "continuous"]
 
@@ -39,6 +40,7 @@ class Task:
         self.param_aggregation = parameter_aggregation
         self.action_type = action_type
         self.actions = actions
+        self.device = device
 
     @abstractmethod
     def get_prior(self) -> Callable:
@@ -109,7 +111,12 @@ class Task:
         prior = self.get_prior()
         simulator = self.get_simulator()
         simulator, prior = prepare_for_sbi(simulator, prior)
-        thetas, xs = simulate_for_sbi(simulator, proposal=prior, num_simulations=n, show_progress_bar=show_progress)
+        thetas, xs = simulate_for_sbi(
+            simulator,
+            proposal=prior,
+            num_simulations=n,
+            show_progress_bar=show_progress,
+        )
         # thetas = self.sample_prior(n=n)
         # if show_progress:
         #     xs = torch.empty((n, self.dim_data))
@@ -199,11 +206,13 @@ class BenchmarkTask(Task):
         assert type(x) == int, "Provide index of the reference observation."
         a = atleast_2d(a)
         if verbose and not (self.actions.is_valid(a)).all():
-            print("Some actions are invalid, expected costs with be inf for those actions. ")
+            print(
+                "Some actions are invalid, expected costs with be inf for those actions. "
+            )
 
-        post = self.get_reference_samples(n=x)
+        post = self.get_reference_samples(n=x).to(self.device)
 
-        expected_costs = torch.empty_like(a)
+        expected_costs = torch.empty_like(a).to(self.device)
         mask = self.actions.is_valid(a)
         a_valid = a[:, mask]
         expected_costs[:, torch.logical_not(mask)] = torch.inf
@@ -231,7 +240,9 @@ class BenchmarkTask(Task):
         prior = self.get_prior_dist()
         simulator = self.get_simulator()
 
-        transforms = self._task._get_transforms(automatic_transforms_enabled)["parameters"]
+        transforms = self._task._get_transforms(automatic_transforms_enabled)[
+            "parameters"
+        ]
         if automatic_transforms_enabled:
             prior = wrap_prior_dist(prior, transforms)
             simulator = wrap_simulator_fn(simulator, transforms)

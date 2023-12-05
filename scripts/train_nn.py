@@ -12,8 +12,8 @@ import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
-from loss_cal.costs import MultiClass01Cost, RevGaussCost, StepCost_weighted
-from loss_cal.predictor import build_nn, train
+from loss_cal.costs import MultiClass01Cost, MultiClassStepCost, RevGaussCost
+from loss_cal.bam import build_nn, train
 from loss_cal.tasks import get_task
 from loss_cal.utils.utils import load_data, prepare_for_training, save_metadata
 
@@ -58,44 +58,43 @@ def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # load configs
-    parameter = cfg.task.parameter
-    aligned = True
-    offset = 0
-    if parameter == "None":
-        parameter = None
+    parameter = cfg.task.parameter if cfg.task.parameter != "None" else None
+    if parameter == None:
         if task_name == "sir":
-            print("Fix parameter range to R0 specific range (4) and set aligned=False.")
-            parameter_range = 4.0
-            aligned = False
-            offset = 1
+            print(
+                "Fix parameter range to R0 specific range (23.8148, based on 99.99% quantile of training data), aligned=False, offset=1.0."
+            )
+            parameter_range = [0.0, 23.8148]
         elif task_name == "linear_gaussian":
-            parameter_range = (task.param_high[0] - task.param_low[0]).squeeze().item()
-            aligned = True
-            offset = torch.abs(task.param_high[0])
+            parameter_range = [
+                task.param_low[0].squeeze().item(),
+                task.param_high[0].squeeze().item(),
+            ]
         else:
             print("Task not defined without specified parameter!")
             raise (NotImplementedError)
     else:
-        parameter_range = (
-            (task.param_high[parameter] - task.param_low[parameter]).squeeze().item()
-        )
+        parameter_range = [
+            task.param_low[parameter].squeeze().item(),
+            task.param_high[parameter].squeeze().item(),
+        ]
     print("parameter_range", parameter_range)
     stop_after_epochs = cfg.model.stop_after_epochs
 
-    # if action_type == "discrete":
-    #     threshold = round(cfg.action.T, ndigits=4)
-    #     costs = list(cfg.action.costs)
-    #     cost_fn = StepCost_weighted(costs, threshold=threshold)
     if action_type == "discrete":
         theta_crit = torch.Tensor(list(cfg.action.T))
-        costs = torch.ones_like(theta_crit).tolist()
-        cost_fn = MultiClass01Cost(
-            theta_crit=theta_crit, parameter_range=parameter_range, max_val=1
-        )
+        costs = [1.0] * theta_crit.shape[0]
+        cost_fn = MultiClass01Cost(theta_crit=theta_crit)
+        # factors = torch.ones(num_actions, num_actions)
+        # factors[0, 2] = 10.0
+        # print("factors (BVEP specific!)", factors)
+        # cost_fn = MultiClassStepCost(theta_crit=theta_crit, factors=factors)
     elif action_type == "continuous":
         factor = cfg.action.factor
         exponential = float(cfg.action.exponential)
-        action_range = task.action_high - task.action_low
+        aligned = cfg.action.aligned
+        offset = cfg.action.offset
+        action_range = [task.action_low, task.action_high]
         cost_fn = RevGaussCost(
             parameter_range=parameter_range,
             action_range=action_range,
@@ -138,8 +137,12 @@ def main(cfg: DictConfig):
         parameter=parameter,
         device=device,
     )
+    num_action_samples_train = cfg.num_action_samples_train
+    num_action_samples_val = cfg.num_action_samples_val
+    sample_actions_in_loop = cfg.sample_in_loop
 
-    print("data shapes: ", x_train.shape, theta_train.shape)
+    print("data shapes (train): ", x_train.shape, theta_train.shape)
+    print("data shapes (val): ", x_val.shape, theta_val.shape)
 
     # create directory & save metadata
     save_dir = path.join(
@@ -149,11 +152,15 @@ def main(cfg: DictConfig):
         "nn",
         model,
         cfg.experiment,
-        str(seed)
+        str(seed),
+        f"{num_action_samples_train}actions" if not sample_actions_in_loop else "inloop"
         #  " ".join([str(cfg.model.hidden).replace(", ", "-")[1:-1], cfg.model.output_transform]),
     )
+    print("Saving model at:", save_dir)
+
     model_dir = prepare_for_training(
         base_dir=save_dir,
+        ntrain=ntrain,
         parameter=parameter,
         action_type=action_type,
         action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
@@ -173,6 +180,9 @@ def main(cfg: DictConfig):
         action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
         if action_type == "discrete"
         else (factor, exponential),
+        num_action_samples_train=num_action_samples_train,
+        num_action_samples_val=num_action_samples_val,
+        sample_in_loop=sample_actions_in_loop,
         seed=seed,
         lr=learning_rate,
         ntrain=ntrain,
@@ -182,13 +192,11 @@ def main(cfg: DictConfig):
     )
 
     # training
-    print(f"save model at: {save_dir}\ndevice: {device}")
-
     nn = build_nn(
         model="fc",
-        x_train=x_train,
-        action_train=task.actions.sample(
-            x_train.shape[0]
+        x_train=x_train.to(device),
+        action_train=task.actions.sample(x_train.shape[0]).to(
+            device
         ),  # sample actions to initialize Standardize layer
         hidden_dims=hidden_layers,
         output_dim=1,
@@ -201,12 +209,15 @@ def main(cfg: DictConfig):
 
     nn, loss_values_train, loss_values_val = train(
         model=nn,
-        x_train=x_train,
-        theta_train=theta_train,
+        x_train=x_train.to(device),
+        theta_train=theta_train.to(device),
         cost_fn=cost_fn,
-        x_val=x_val,
-        theta_val=theta_val,
+        x_val=x_val.to(device),
+        theta_val=theta_val.to(device),
         actions=task.actions,
+        num_action_samples_train=num_action_samples_train,
+        num_action_samples_val=num_action_samples_val,
+        sample_actions_in_loop=sample_actions_in_loop,
         learning_rate=learning_rate,
         stop_after_epochs=stop_after_epochs,
         max_num_epochs=epochs,
@@ -238,16 +249,37 @@ def load_data_for_training(
     task: str,
     ntrain: int,
     parameter: int,
-    device: str,
+    validation_fraction: float = 0.1,
+    device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
     (
-        theta_train,
-        x_train,
-        theta_val,
-        x_val,
+        theta,
+        x,
         _,
         _,
     ) = load_data(task_name=task.task_name, base_dir=data_dir, device=device)
+
+    # TRAIN-VAL SPLIT (90:10)
+
+    # Get total number of training examples.
+    num_examples = ntrain
+    # Select random train and validation splits from (theta, x) pairs.
+    num_training_examples = int((1 - validation_fraction) * num_examples)
+    num_validation_examples = num_examples - num_training_examples
+
+    if ntrain > theta.shape[0]:
+        raise ValueError("Not enough samples available, create a new dataset first.")
+
+    permuted_indices = torch.randperm(num_examples)
+    train_indices, val_indices = (
+        permuted_indices[:num_training_examples],
+        permuted_indices[num_training_examples:],
+    )
+
+    theta_train = theta[train_indices]
+    x_train = x[train_indices]
+    theta_val = theta[val_indices]
+    x_val = x[val_indices]
 
     theta_train = task.param_aggregation(theta_train)
     theta_val = task.param_aggregation(theta_val)
@@ -260,12 +292,6 @@ def load_data_for_training(
         print(f"Restrict parameters to parameter {parameter}.")
         theta_train = theta_train[:, parameter : parameter + 1]
         theta_val = theta_val[:, parameter : parameter + 1]
-
-    if ntrain > theta_train.shape[0]:
-        raise ValueError("Not enough samples available, create a new dataset first.")
-    elif ntrain < theta_train.shape[0]:
-        theta_train = theta_train[:ntrain]
-        x_train = x_train[:ntrain]
 
     print("Data shapes train (x, theta):", x_train.shape, theta_train.shape)
     print("Data shapes val (x,theta):", x_val.shape, theta_val.shape)
