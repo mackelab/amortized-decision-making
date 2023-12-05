@@ -2,16 +2,22 @@ from typing import Any
 
 
 def get_task(task_name: str, action_type="continuous", **kwargs: Any):
-    """Get task
+    """Provide an instance of a task
 
     Args:
-        task_name: Name of task
+        task_name (str): name of task, one of ['toy_example', 'lotka_volterra', 'sir', 'linear_gaussian', 'bvep']
+        action_type (str, optional): type of action, one of ['continuous', 'discrete']. Defaults to "continuous".
+
+    Raises:
+        NotImplementedError: raise error for tasks that are not implemented yet
 
     Returns:
-        Task instance
+        Task: task object
     """
-    assert action_type in ["discrete", "continuous"], "action_type have to be either 'continuous' or 'discrete'."
-    print("task_name = ", task_name)
+    assert action_type in [
+        "discrete",
+        "continuous",
+    ], "action_type have to be either 'continuous' or 'discrete'."
 
     if task_name == "toy_example":
         from loss_cal.tasks.toy_example import ToyExample

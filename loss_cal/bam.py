@@ -1,13 +1,13 @@
+from os import path
 import glob
 import json
-import time
 from copy import deepcopy
-from os import path
+
 from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 
 import torch
+
 from sbi.utils.sbiutils import Standardize, seed_all_backends
-from sbi.utils.torchutils import atleast_2d
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -47,15 +47,21 @@ class FeedforwardNN(nn.Module):
             ValueError: Invalid x-scoring option, must be one of 'None', 'Independent', 'Structured'
         """
         if len(hidden_dims) == 0:
-            raise ValueError("Specify at least one hidden layer, list of hidden dims can't be empty.")
+            raise ValueError(
+                "Specify at least one hidden layer, list of hidden dims can't be empty."
+            )
 
         if z_scoring.capitalize() in ["Independent", "Structured"]:
-            assert mean is not None and std is not None, "Provide mean and standard deviation for z-scoring."
+            assert (
+                mean is not None and std is not None
+            ), "Provide mean and standard deviation for z-scoring."
             z_scoring_bool = True
         elif z_scoring.capitalize() == "None":
             z_scoring_bool = False
         else:
-            raise ValueError("Invalid z-scoring opion, use 'None', 'Independent', 'Structured'.")
+            raise ValueError(
+                "Invalid z-scoring opion, use 'None', 'Independent', 'Structured'."
+            )
 
         super(FeedforwardNN, self).__init__()
 
@@ -69,12 +75,12 @@ class FeedforwardNN(nn.Module):
             self.standardize_layer = Standardize(mean, std)
         self.input_layer = nn.Linear(input_dim, hidden_dims[0])
         self.hidden_layers = nn.ModuleList(
-            [nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(hidden_dims[:-1], hidden_dims[1:])]
+            [
+                nn.Linear(in_dim, out_dim)
+                for in_dim, out_dim in zip(hidden_dims[:-1], hidden_dims[1:])
+            ]
         )
         self.final_layer = nn.Linear(hidden_dims[-1], output_dim)
-        # if output_transform == nn.ReLU():
-        #     torch.nn.init.kaiming_normal_(self.final_layer.weight.data, nonlinearity="relu")
-        #     torch.nn.init.kaiming_normal_(self.final_layer.bias.data, nonlinearity="relu")
 
         # Activation function
         self.activation = activation
@@ -99,10 +105,12 @@ class FeedforwardNN(nn.Module):
             x.shape[0] == a.shape[0]
         ), "Observations and actions should share the first dimension, i.e. same number of samples."
         if x.shape[1] != self.in_dim - a.shape[1]:
-            raise ValueError("Expected inputs of dim {}, got {}.".format(self.in_dim - a.shape[1], x.shape[1]))
+            raise ValueError(
+                f"Expected inputs of dim {self.in_dim - a.shape[1]}, got {x.shape[1]}."
+            )
 
         # concatenate x and a to form input
-        input = torch.concatenate([x, a], dim=1)
+        input = torch.concat([x, a], dim=1)
 
         if self.z_scored:
             input = self.standardize_layer(input)
@@ -147,7 +155,6 @@ def get_mean_and_std(z_scoring: str, data_train: torch.Tensor, eps: float = 1e-1
 
 def build_nn(
     model: str,
-    # input_dim: int,
     x_train: Union[torch.Tensor, int],
     action_train: Union[torch.Tensor, int],
     hidden_dims: Iterable,
@@ -183,16 +190,22 @@ def build_nn(
     # check z_scoring
     assert type(x_train) == type(action_train)
     if z_scoring.capitalize() in ["None", "Independent", "Structured"]:
-        if type(x_train) == int:
+        if isinstance(x_train, int):
             input_dim = x_train + action_train
-            assert mean is not None and std is not None, "Provide training data or mean and std. Needed for z-scoring."
+            assert (
+                mean is not None and std is not None
+            ), "Provide training data or mean and std. Needed for z-scoring."
         else:
-            input = torch.concatenate([atleast_2d_col(x_train), atleast_2d_col(action_train)], dim=1)
+            input = torch.concat(
+                [atleast_2d_col(x_train), atleast_2d_col(action_train)], dim=1
+            )
             mean, std = get_mean_and_std(z_scoring, input)
             input_dim = input.shape[1]
         # input_dim += action_dim
     else:
-        raise ValueError("Invalid z-scoring option, use 'None', 'Independent', 'Structured'.")
+        raise ValueError(
+            "Invalid z-scoring option, use 'None', 'Independent', 'Structured'."
+        )
 
     if model == "fc":
         seed_all_backends(seed)
@@ -211,7 +224,6 @@ def build_nn(
     return neural_net
 
 
-# TODO
 def train(
     model: nn.Module,
     x_train: torch.Tensor,
@@ -220,7 +232,11 @@ def train(
     x_val: torch.Tensor,
     theta_val: torch.Tensor,
     actions: Action,
-    stop_after_epochs: int = 50,
+    save_sampled_actions=False,
+    num_action_samples_train=10,
+    num_action_samples_val=10,
+    sample_actions_in_loop=False,
+    stop_after_epochs: int = 10,  # reduce from 50 to 10, because actions are sampled before training loop
     max_num_epochs: int = None,
     learning_rate: float = 5e-4,
     batch_size: int = 500,
@@ -231,7 +247,6 @@ def train(
     device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     seed=0,
     shuffle_data=True,
-    save_sampled_actions=False,
 ) -> Tuple[nn.Module, torch.Tensor, torch.Tensor]:
     """Training loop to train a model until convergence with L2 loss.
 
@@ -265,16 +280,39 @@ def train(
 
     max_num_epochs = 2**31 - 1 if max_num_epochs is None else max_num_epochs
 
-    _summary = dict(
-        validation_losses=[],
-        training_losses=[],
+    _summary = {
+        "validation_losses": [],
+        "training_losses": [],
+    }
+
+    if sample_actions_in_loop:
+        train_data = TensorDataset(
+            x_train.repeat(num_action_samples_train, 1).to(device),
+            theta_train.repeat(num_action_samples_train, 1).to(device),
+        )
+    else:
+        # sample fixed number of actions in beginning
+        actions_train = actions.sample(num_action_samples_train * x_train.shape[0])
+        train_data = TensorDataset(
+            x_train.repeat(num_action_samples_train, 1).to(device),
+            theta_train.repeat(num_action_samples_train, 1).to(device),
+            actions_train.to(device),
+        )
+
+    # fixed vaildation data
+    actions_val = actions.sample(num_action_samples_val * x_val.shape[0])
+    val_data = TensorDataset(
+        x_val.repeat(num_action_samples_val, 1).to(device),
+        theta_val.repeat(num_action_samples_val, 1).to(device),
+        actions_val.to(device),
     )
 
-    train_data = TensorDataset(x_train.to(device), theta_train.to(device))
-    val_data = TensorDataset(x_val.to(device), theta_val.to(device))
-
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=shuffle_data)
-    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=shuffle_data)
+    train_loader = DataLoader(
+        train_data, batch_size=min(batch_size, x_train.shape[0]), shuffle=shuffle_data
+    )
+    val_loader = DataLoader(
+        val_data, batch_size=min(batch_size, x_val.shape[0]), shuffle=False
+    )
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -296,18 +334,26 @@ def train(
     model.to(device)
 
     while epoch <= max_num_epochs:
-        # print("-----" * 5)
-        # print(f"Epoch {epoch}")
-        # print("-----" * 5)
         train_loss_sum = 0.0
         model.train()
 
-        actions_epoch = actions.sample(x_train.shape[0])
-        action_loader = DataLoader(TensorDataset(actions_epoch), batch_size=batch_size, shuffle=shuffle_data)
-        for (x_batch, theta_batch), (a_batch,) in zip(train_loader, action_loader):
-            # print("x_batch", x_batch[:5])
-            # print("theta_batch", theta_batch[:5])
-            # print("a_batch", a_batch[:5])
+        if sample_actions_in_loop:
+            action_loader = DataLoader(
+                TensorDataset(actions.sample(x_train.shape[0]).to(device)),
+                batch_size=batch_size,
+                shuffle=shuffle_data,
+            )
+
+        for b, data_batch in enumerate(
+            train_loader
+            if not sample_actions_in_loop
+            else zip(train_loader, action_loader)
+        ):
+            if sample_actions_in_loop:
+                (x_batch, theta_batch), (a_batch,) = data_batch
+            else:
+                x_batch, theta_batch, a_batch = data_batch
+
             optimizer.zero_grad()
 
             predictions = model(x_batch, a_batch)
@@ -315,13 +361,16 @@ def train(
             # L2 loss
             costs_batch = cost_fn(theta_batch, a_batch)
             batch_loss = ((costs_batch - predictions) ** 2).mean(dim=0)
-            # batch_loss = BCELoss_weighted(weights=[5.0, 1.0], threshold=2.0)(
-            #     prediction=predictions, target=costs_batch, theta=theta_batch
-            # ).mean(dim=0)
             train_loss_sum += batch_loss.item()
 
             batch_loss.backward()
             optimizer.step()
+
+            if save_sampled_actions:
+                torch.save(
+                    torch.hstack([x_batch, theta_batch, a_batch]),
+                    path.join(model_dir, "actions", f"xtha_e{epoch}_batch{b}.pt"),
+                )
 
         epoch += 1
         avg_train_loss = train_loss_sum / len(train_loader)
@@ -331,17 +380,11 @@ def train(
         model.eval()
         val_loss_sum = 0.0
 
-        action_val_loader = DataLoader(
-            TensorDataset(actions.sample(x_val.shape[0])), batch_size=batch_size, shuffle=shuffle_data
-        )
         with torch.no_grad():
-            for (x_val_batch, theta_val_batch), (a_val_batch,) in zip(val_loader, action_val_loader):
+            for x_val_batch, theta_val_batch, a_val_batch in val_loader:
                 val_preds_batch = model(x_val_batch, a_val_batch)
                 val_costs_batch = cost_fn(theta_val_batch, a_val_batch)
                 val_batch_loss = ((val_costs_batch - val_preds_batch) ** 2).mean(dim=0)
-                # val_batch_loss = BCELoss_weighted(weights=[5.0, 1.0], threshold=2.0)(
-                #     prediction=val_preds_batch, target=val_costs_batch, theta=theta_val_batch
-                # ).mean(dim=0)
                 val_loss_sum += val_batch_loss.item()
 
         avg_val_loss = val_loss_sum / len(val_loader)
@@ -363,8 +406,20 @@ def train(
         )
 
         is_best = _epochs_since_last_improvement == 0
-        if epoch % ckp_interval == 0 or is_best:
-            checkpoint = {
+        # if epoch % ckp_interval == 0 or is_best:
+        #     checkpoint = {
+        #         "epoch": epoch,
+        #         "state_dict": model.state_dict(),
+        #         "optimizer": optimizer.state_dict(),
+        #         "training_losses": torch.as_tensor(_summary["training_losses"]),
+        #         "validation_losses": torch.as_tensor(_summary["validation_losses"]),
+        #         "_best_val_loss": _best_val_loss,
+        #         "_best_model_state_dict": _best_model_state_dict,
+        #         "_epochs_since_last_improvement": _epochs_since_last_improvement,
+        #     }
+
+        if is_best:
+            checkpoint_best = {
                 "epoch": epoch,
                 "state_dict": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
@@ -375,19 +430,15 @@ def train(
                 "_epochs_since_last_improvement": _epochs_since_last_improvement,
             }
 
-            save_checkpoint(checkpoint, is_best, ckp_interval, model_dir)
-
-        if save_sampled_actions:
-            torch.save(x_train, path.join(model_dir, "actions", f"xtrain_e{epoch}.pt"))
-            torch.save(actions_epoch, path.join(model_dir, "actions", f"actions_e{epoch}.pt"))
-
-        # if epoch % ckp_interval == 0:
         print(
             f"{epoch}\t val_loss = {avg_val_loss:.8f}\t train_loss = {avg_train_loss:.8f}\t last_improvement = {_epochs_since_last_improvement}",
             end="\r",
         )
         if converged:
-            print(f"Converged after {epoch} epochs.")
+            save_checkpoint(checkpoint_best, True, ckp_interval, model_dir)
+            print(
+                f"\n{'-'*81}\n|\tConverged after {epoch} epochs, best achieved validation loss: {checkpoint_best['_best_val_loss']:.4f}.\t|\n{'-'*81}\n"
+            )
             break
         elif max_num_epochs == epoch:
             print(
@@ -458,11 +509,13 @@ def save_checkpoint(state: Dict, is_best: bool, save_interval: int, model_dir: s
         save_interval (int): interval to save checkpoints
         model_dir (str): directory where to save the checkpoint
     """
-    assert path.exists(path.join(model_dir, "checkpoints")), "Subdirectory 'checkpoints' missing."
+    assert path.exists(
+        path.join(model_dir, "checkpoints")
+    ), "Subdirectory 'checkpoints' missing."
 
-    if state["epoch"] % save_interval == 0:
-        f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
-        torch.save(state, f_path)
+    # if state["epoch"] % save_interval == 0:
+    #     f_path = path.join(model_dir, f"checkpoints/checkpoint_e{state['epoch']}.pt")
+    #     torch.save(state, f_path)
     if is_best:
         best_fpath = path.join(model_dir, "best_model.pt")
         torch.save(state, best_fpath)
@@ -495,29 +548,45 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer):
 
 
 def load_predictors(
-    task_name,
-    dir,
-    data_dir=None,
+    task_name: str,
+    dir: str,
+    data_dir: str = "./data",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     **task_specifications,
 ):
+    """load all available trained networks
+
+    Args:
+        task_name (str): task name
+        dir (str): path to models
+        data_dir (str, optional): path to data. Defaults to "./data".
+        device (torch.device, optional): device. Defaults to torch.device("cuda" if torch.cuda.is_available() else "cpu").
+
+    Returns:
+        List[FeedforwardNN], List[int]: list of models and list of number of simulations
+    """
     # load data
     (
         _,
         x_train,
         _,
         _,
-        _,
-        _,
     ) = load_data(task_name, device=device, base_dir=data_dir)
 
     model_files = glob.glob(path.join(dir, "best_model.pt"))
-    metadata_files = [json.load(open(f.split("best_model.pt")[0] + "metadata.json")) for f in model_files]
+    metadata_files = [
+        json.load(open(f.split("best_model.pt")[0] + "metadata.json"))
+        for f in model_files
+    ]
 
-    get_nsim = lambda file: int(json.load(open(file.split("best_model.pt")[0] + "metadata.json"))["ntrain"])
+    get_nsim = lambda file: int(
+        json.load(open(file.split("best_model.pt")[0] + "metadata.json"))["ntrain"]
+    )
 
     def get_param(file: str):
-        param = json.load(open(file.split("best_model.pt")[0] + "metadata.json"))["parameter"]
+        param = json.load(open(file.split("best_model.pt")[0] + "metadata.json"))[
+            "parameter"
+        ]
         if param == None:
             return -1
         else:
@@ -527,10 +596,11 @@ def load_predictors(
 
     model_files.sort(key=order_files)
     metadata_files.sort(
-        key=lambda file: int(file["ntrain"]) + (int(file["parameter"]) if file["parameter"] != None else 0)
+        key=lambda file: int(file["ntrain"])
+        + (int(file["parameter"]) if file["parameter"] is not None else 0)
     )
 
-    print(f"Loading models:")
+    print("Loading models:")
     str_to_tranformation = {
         "ReLU": torch.nn.ReLU(),
         "Sigmoid": torch.nn.Sigmoid(),
@@ -554,8 +624,10 @@ def load_predictors(
         actions = get_task(task_name, **task_specifications).actions
         model = build_nn(
             model=metadata["model"],
-            x_train=x_train,
-            action_train=actions.sample(x_train.shape[0]),  # TODO: does the sampling here hurt?
+            x_train=x_train.to(device),
+            action_train=actions.sample(x_train.shape[0]).to(
+                device
+            ),  # TODO: does the sampling here hurt?
             hidden_dims=architecture[1:-1],
             output_dim=architecture[-1],
             activation=activation,
@@ -566,6 +638,8 @@ def load_predictors(
         model.eval()
         models.append(deepcopy(model))
         num_simulations.append(metadata["ntrain"])
-        print(f"- {metadata['ntrain']} simulations,\t best val loss {model_ckp['_best_val_loss']:.4f}:\t{file}")
+        print(
+            f"- {metadata['ntrain']} simulations,\t best val loss {model_ckp['_best_val_loss']:.4f}:\t{file}"
+        )
 
     return models, num_simulations

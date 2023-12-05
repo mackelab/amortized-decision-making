@@ -5,4 +5,4 @@ activation: ReLU
 epochs: None
 lr: 1e-3
 zscore: Independent
-stop_after_epochs: 50
+stop_after_epochs: 10
