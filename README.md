@@ -1,3 +1,5 @@
 # Loss-Calibration for sbi
 
-Master thesis on "Loss-Calibration for Simulation-Based Inference" by Mila
+Code for the paper `Amortized Bayesian decision making for simulation-based models` is in the branch `paper`.
+
+Master thesis on "Loss-Calibration for Simulation-Based Inference" is on the `main` branch.
