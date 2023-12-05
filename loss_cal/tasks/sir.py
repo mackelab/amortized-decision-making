@@ -1,18 +1,16 @@
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import List
 
 import matplotlib.pyplot as plt
-import sbibm
 import torch
-from sbi.utils import BoxUniform
 
 from loss_cal.actions import CategoricalAction, UniformAction
 from loss_cal.tasks.task import BenchmarkTask
 
-_task = sbibm.get_task("sir")
-
 
 class SIR(BenchmarkTask):
-    def __init__(self, action_type: str, num_actions: int = None, probs: List = None) -> None:
+    def __init__(
+        self, action_type: str, num_actions: int = None, probs: List = None
+    ) -> None:
         assert action_type in ["discrete", "continuous"]
 
         self.param_low = torch.Tensor([0.0, 0.0])
@@ -20,7 +18,7 @@ class SIR(BenchmarkTask):
             [1.8754, 0.2319]
         )  # based on where 99.9% of the mass of the prior are (torch.distributions.LogNormal(...).icdf(torch.Tensor([0.999])))
         param_range = {"low": self.param_low, "high": self.param_high}
-        parameter_aggegration = lambda params: torch.log((params[:, 0:1] / params[:, 1:]))
+        parameter_aggegration = lambda params: (params[:, 0:1] / params[:, 1:])
 
         if action_type == "discrete":
             self.num_actions = num_actions
@@ -29,15 +27,19 @@ class SIR(BenchmarkTask):
             actions = CategoricalAction(num_actions=num_actions, probs=probs)
         else:
             self.action_low, self.action_high = 0.0, 100.0
-            actions = UniformAction(low=self.action_low, high=self.action_high, dist=BoxUniform)
+            actions = UniformAction(low=self.action_low, high=self.action_high)
 
-        super().__init__("sir", action_type, actions, param_range, parameter_aggegration)
+        super().__init__(
+            "sir", action_type, actions, param_range, parameter_aggegration
+        )
 
     ## Extra functions
     def plot_observations(self, rows: int = 2, cols: int = 5):
         # TODO: placement of legend
         n_observations = 10
-        fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows), constrained_layout=True)
+        fig, axes = plt.subplots(
+            rows, cols, figsize=(3 * cols, 3 * rows), constrained_layout=True
+        )
         for idx in range(n_observations):
             obs = self.get_observation(n=idx + 1)
             axes[idx // cols, idx % cols].plot(obs[0, :10], label="infected")
@@ -45,7 +47,9 @@ class SIR(BenchmarkTask):
                 rf" ".join(
                     [
                         rf"{k}={v.item():.3f}"
-                        for (k, v) in zip(self.parameter_names, self.get_true_parameters(n=idx + 1).T)
+                        for (k, v) in zip(
+                            self.parameter_names, self.get_true_parameters(n=idx + 1).T
+                        )
                     ]
                 ),
                 size=10,
@@ -53,85 +57,3 @@ class SIR(BenchmarkTask):
         axes[0, 0].legend()
         fig.suptitle("observations")
         return fig, axes
-
-    # ## TODO
-    # def bayes_optimal_action(
-    #     self,
-    #     x_o: torch.Tensor,
-    #     a_grid: torch.Tensor,
-    #     cost_fn: Callable,
-    #     lower: float = 0.0,
-    #     upper: float = 5.0,
-    #     resolution: int = 500,
-    # ) -> float:
-    #     """Compute the Bayes optimal action under the ground truth posterior
-
-    #     Args:
-    #         x_o (torch.Tensor): observation, conditional of the posterior p(theta|x=x_o)
-    #         a_grid (torch.Tensor): actions to compute the incurred costs for
-    #         lower (float, optional): lower bound the parameter grid/integral. Defaults to 0.0.
-    #         upper (float, optional): upper bound of the parameter grid/integral. Defaults to 5.0.
-    #         resolution (int, optional): number of evaluation points. Defaults to 500.
-    #         cost_fn (Callable, optional): cost function to compute incurred costs. Defaults to RevGaussCost(factor=1).
-
-    #     Returns:
-    #         float: action with minimal incurred costs
-    #     """
-    #     raise NotImplementedError
-    #     losses = torch.tensor(
-    #         [
-    #             self.expected_posterior_costs(
-    #                 x=x_o, a=a, lower=lower, upper=upper, resolution=resolution, cost_fn=cost_fn
-    #             )
-    #             for a in a_grid
-    #         ]
-    #     )
-    #     return a_grid[losses.argmin()]
-
-    # def bayes_optimal_action_binary(
-    #     self,
-    #     n: int,
-    #     param: int,
-    #     cost_fn: Callable = StepCost_weighted(weights=[5.0, 1.0], threshold=2.0),
-    #     verbose=False,
-    # ) -> float:
-    #     """Compute the Bayes optimal action under the ground truth posterior for binary action
-
-    #     Args:
-    #         x_o (torch.Tensor): observation, conditional of the posterior p(theta|x=x_o)
-    #         a_grid (torch.Tensor): actions to compute the incurred costs for
-    #         lower (float, optional): lower bound the parameter grid/integral. Defaults to 0.0.
-    #         upper (float, optional): upper bound of the parameter grid/integral. Defaults to 5.0.
-    #         resolution (int, optional): number of evaluation points. Defaults to 500.
-    #         cost_fn (Callable, optional): cost function to compute incurred costs. Defaults to StepCost_weighted(weights=[5.0, 1.0], threshold=2.0).
-
-    #     Returns:
-    #         float: action with minimal incurred costs
-    #     """
-    #     costs_action0, costs_action1 = self.expected_posterior_costs(
-    #         n=n, a=torch.Tensor([[0.0], [1.0]]), param=param, cost_fn=cost_fn, verbose=verbose
-    #     )
-    #     return (costs_action0 > costs_action1).float()
-
-    # def posterior_ratio_binary(
-    #     self,
-    #     n: int,
-    #     param: int,
-    #     cost_fn: Callable = StepCost_weighted(weights=[5.0, 1.0], threshold=2.0),
-    #     verbose=False,
-    # ) -> float:
-    #     """Compute the posterior ratio: (exp. costs taking action 0)/(exp. costs taking action 0 + exp. costs taking action 1)
-
-    #     Args:
-    #         x_o (torch.Tensor): observation, conditional of posterior p(theta|x_o)
-    #         lower (float, optional): lower bound of the parameter grid/integral. Defaults to 0.0.
-    #         upper (float, optional): upper bound of the parameter grid/inetgral. Defaults to 5.0.
-    #         resolution (int, optional): number of evaluation points. Defaults to 500.
-    #         cost_fn (Callable, optional): cost function to compute incurred costs.Defaults to StepCost_weighted(weights=[5.0, 1.0], threshold=2.0).
-    #     Returns:
-    #         float: posterior ratio
-    #     """
-    #     int_0, int_1 = self.expected_posterior_costs(
-    #         n=n, a=torch.Tensor([[0.0], [1.0]]), param=param, cost_fn=cost_fn, verbose=verbose
-    #     )
-    #     return int_0 / (int_0 + int_1)

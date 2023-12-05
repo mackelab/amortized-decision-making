@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from os import getcwd, mkdir, path
-from typing import Callable, Optional, Tuple
+from typing import Callable, Tuple
 
 import torch
 
@@ -10,37 +10,41 @@ def load_data(
     task_name: str,
     base_dir: str = "./data",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Load training, validation and test data from folder.
+) -> Tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+]:
+    """Load training and test data from folder.
 
     Args:
         task_name (str): Name of the task, used as folder name.
         base_dir (str, optional): Base directory where data is stored in folder 'task_name'. Defaults to "./data".
 
     Returns:
-        Tuple[ torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor ]: training, validationa and test data (theta and x)
+        Tuple[ torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor ]: training and test data (theta and x)
     """
     dir = path.join(base_dir, task_name)
     print(f"Load data from '{dir}', device = {device}.")
     try:
         theta_train = torch.load(path.join(dir, "theta_train.pt"), map_location=device)
         x_train = torch.load(path.join(dir, "x_train.pt"), map_location=device)
-        theta_val = torch.load(path.join(dir, "theta_val.pt"), map_location=device)
-        x_val = torch.load(path.join(dir, "x_val.pt"), map_location=device)
         theta_test = torch.load(path.join(dir, "theta_test.pt"), map_location=device)
         x_test = torch.load(path.join(dir, "x_test.pt"), map_location=device)
     except FileNotFoundError:
         print("Data not found, check path or generate data first.")
         print(f"Current path: {getcwd()}, provided path to data: {dir}")
-    return theta_train, x_train, theta_val, x_val, theta_test, x_test
+
+    return (
+        theta_train,
+        x_train,
+        theta_test,
+        x_test,
+    )
 
 
 def save_data(
     task_name: str,
     theta_train: torch.Tensor,
     x_train: torch.Tensor,
-    theta_val: torch.Tensor,
-    x_val: torch.Tensor,
     theta_test: torch.Tensor,
     x_test: torch.Tensor,
     base_dir: str = "./data",
@@ -51,8 +55,6 @@ def save_data(
         task_name (str): Name of task, used as name of the folder
         theta_train (torch.Tensor): training data - parameters
         x_train (torch.Tensor): training data - observations
-        theta_val (torch.Tensor): validation data - parameters
-        x_val (torch.Tensor): validation data - observations
         theta_test (torch.Tensor): test data - parameters
         x_test (torch.Tensor): test data - observations
         base_dir (str, optional): Base directory where to save folder with data. Defaults to "./data".
@@ -60,8 +62,6 @@ def save_data(
     dir = path.join(base_dir, task_name)
     torch.save(theta_train, path.join(dir, "theta_train.pt"))
     torch.save(x_train, path.join(dir, "x_train.pt"))
-    torch.save(theta_val, path.join(dir, "theta_val.pt"))
-    torch.save(x_val, path.join(dir, "x_val.pt"))
     torch.save(theta_test, path.join(dir, "theta_test.pt"))
     torch.save(x_test, path.join(dir, "x_test.pt"))
     print(f"Saved training, test and vailadation data at: {dir}")
@@ -69,6 +69,7 @@ def save_data(
 
 def prepare_for_training(
     base_dir: str,
+    ntrain: int,
     parameter: int,
     action_type: str,
     action_parameters: Tuple,
@@ -84,22 +85,26 @@ def prepare_for_training(
         str: _description_
     """
     timestamp = datetime.now().isoformat().split(".")[0].replace(":", "_")
-    assert action_type in {"discrete", "continuous"}, "Type of actions has to be one of 'discrete' and 'continuous'."
+    assert action_type in {
+        "discrete",
+        "continuous",
+    }, "Type of actions has to be one of 'discrete' and 'continuous'."
     to_str = (
-        lambda n: str(int(n)) if type(n) == int or (type(n) == float and n.is_integer()) else str(n).replace(".", "_")
+        lambda n: str(int(n))
+        if type(n) == int or (type(n) == float and n.is_integer())
+        else str(n).replace(".", "_")
     )
     if action_type == "discrete":
         threshold, costs = action_parameters
         model_dir = path.join(
             base_dir,
-            # f"{timestamp}_param_{parameter}_threshold_{to_str(threshold)}_costs_{to_str(costs[0])}_{to_str(costs[1])}",
-            f"{timestamp}_param_{parameter}_threshold_{'_'.join([to_str(t) for t in threshold])}_costs_{'_'.join([to_str(c) for c in costs])}",
+            f"{timestamp}_n{ntrain}_param_{parameter}_threshold_{'_'.join([to_str(t) for t in threshold])}_costs_{'_'.join([to_str(c) for c in costs])}",
         )
     else:
         factor, exponential = action_parameters
         model_dir = path.join(
             base_dir,
-            f"{timestamp}_param_{parameter}_factor_{to_str(factor)}_exp_{to_str(exponential)}",
+            f"{timestamp}_n{ntrain}_param_{parameter}_factor_{to_str(factor)}_exp_{to_str(exponential)}",
         )
     create_filestructure(model_dir=model_dir)
     return model_dir
@@ -117,10 +122,15 @@ def create_filestructure(model_dir: str):
         mkdir(path.join(model_dir, "checkpoints/"))
         print(f"Created directory {model_dir}.")
     except FileExistsError:
-        print(f"Directory {model_dir} already exists.")
+        raise FileExistsError(f"Directory {model_dir} already exists.")
 
 
 def create_checkpoint_dir(model_dir: str):
+    """Create a checkpoint folder at provided directory
+
+    Args:
+        model_dir (str): root path of model
+    """
     check_base_dir_exists(model_dir)
     try:
         mkdir(path.join(model_dir, "checkpoints/"))
@@ -130,6 +140,15 @@ def create_checkpoint_dir(model_dir: str):
 
 
 def create_seed_dir(model_dir: str, seed: int):
+    """Create a folder for the seed at provided directory
+
+    Args:
+        model_dir (str): base directory
+        seed (int): seed
+
+    Returns:
+        str: directory of newly created seed folder
+    """
     check_base_dir_exists(model_dir)
     new_dir = path.join(model_dir, str(seed))
     try:
@@ -151,6 +170,9 @@ def save_metadata(
     parameter: int,
     action_type: str,
     action_parameters: Tuple,
+    num_action_samples_train: int,
+    num_action_samples_val: int,
+    sample_in_loop: bool,
     seed: int,
     lr: float,
     ntrain: int,
@@ -158,7 +180,11 @@ def save_metadata(
     epochs: int,
     data_dir=str,
 ):
-    assert action_type in ["discrete", "continuous"], "Specifiy the type of actions, one of 'discrete' or 'continuous'."
+    """save metadata of model"""
+    assert action_type in [
+        "discrete",
+        "continuous",
+    ], "Specifiy the type of actions, one of 'discrete' or 'continuous'."
 
     metadata = {
         "seed": seed,
@@ -171,6 +197,9 @@ def save_metadata(
         "learning_rate": lr,
         "ntrain": ntrain,
         "stop_after_epochs": stop_after_epochs,
+        "num_action_samples_train": num_action_samples_train,
+        "num_action_samples_val": num_action_samples_val,
+        "sample_in_loop": sample_in_loop,
         "parameter": parameter,
         "max_num_epochs": epochs,
         "data_dir": data_dir,
@@ -201,12 +230,15 @@ def check_base_dir_exists(base_dir: str):
 
 
 def atleast_2d_col(x: torch.Tensor):
+    """turn tensor into 2d column vector if not already 2d"""
     if x.ndim < 2:
         x = x.reshape(-1, 1)
     return x
 
 
-def posterior_ratio_given_samples(posterior_samples: torch.Tensor, treshold: float, costs: list) -> float:
+def posterior_ratio_given_samples(
+    posterior_samples: torch.Tensor, treshold: float, costs: list
+) -> float:
     """Compute posterior ratio based on samples.
 
     Args:

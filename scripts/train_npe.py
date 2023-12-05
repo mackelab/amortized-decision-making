@@ -1,5 +1,4 @@
-# usage: python train_npe.py task.name=toy_example action=continuous model=npe
-
+# usage: python train_npe.py task.name=toy_example action=continuous model=npe seed=0
 
 import os
 from os import path
@@ -10,12 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
 from loss_cal.npe import train_npe
-from loss_cal.utils.utils import (
-    check_base_dir_exists,
-    create_seed_dir,
-    load_data,
-    prepare_for_training,
-)
+from loss_cal.utils.utils import check_base_dir_exists, create_seed_dir, load_data
 
 
 @hydra.main(version_base=None, config_path="./configs/", config_name="config")
@@ -29,9 +23,18 @@ def main(cfg: DictConfig):
 
     task_name = cfg.task.name
     action_type = cfg.action.type
-    num_actions = None if cfg.action.num_actions == "None" else int(cfg.action.num_actions)
-    probs = None if cfg.action.probs == "None" else list(cfg.action.probs)
-    task_specifications = {"action_type": action_type, "num_actions": num_actions, "probs": probs}
+    if action_type == "discrete":
+        num_actions = (
+            None if cfg.action.num_actions == "None" else int(cfg.action.num_actions)
+        )
+        probs = None if cfg.action.probs == "None" else list(cfg.action.probs)
+        task_specifications = {
+            "action_type": action_type,
+            "num_actions": num_actions,
+            "probs": probs,
+        }
+    else:
+        task_specifications = {"action_type": action_type}
     assert task_name in [
         "toy_example",
         "sir",
@@ -50,17 +53,19 @@ def main(cfg: DictConfig):
 
     ntrain = cfg.ntrain
     epochs = cfg.model.epochs
-    device = torch.device("cpu")  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cpu"
+    )  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("Current path:", os.getcwd())
     print("Data dir:", cfg.data_dir)
-    if "active_learning" in cfg.data_dir:
-        theta_train, x_train, _, _, _, _ = load_data(task_name="", base_dir=cfg.data_dir, device=device)
-    else:
-        theta_train, x_train, _, _, _, _ = load_data(task_name=task_name, base_dir=cfg.data_dir, device=device)
+
+    theta_train, x_train, _, _ = load_data(
+        task_name=task_name, base_dir=cfg.data_dir, device=device
+    )
     if ntrain > theta_train.shape[0]:
         raise ValueError("Not enough samples available, create a new dataset first.")
-    elif ntrain < theta_train.shape[0]:
+    if ntrain < theta_train.shape[0]:
         theta_train = theta_train[:ntrain]
         x_train = x_train[:ntrain]
 

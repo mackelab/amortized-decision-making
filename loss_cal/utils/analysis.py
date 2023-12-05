@@ -1,26 +1,41 @@
 from functools import partial
-from typing import Tuple
+from typing import Callable, Tuple
 
-import matplotlib.pyplot as plt
 import torch
+from sbi.inference.posteriors import DirectPosterior
 from sbi.utils.sbiutils import gradient_ascent
 from sbi.utils.torchutils import atleast_2d
 
+from loss_cal.bam import FeedforwardNN
 from loss_cal.costs import expected_posterior_costs_given_posterior_samples
+from loss_cal.tasks.task import Task
 
 
 def compute_mean_distance(
-    observations,
-    task,
-    cost_fn,
-    npe,
-    nn,
+    observations: torch.Tensor,
+    task: Task,
+    cost_fn: Callable,
+    npe: DirectPosterior,
+    nn: FeedforwardNN,
     parameter=None,
     num_samples=1000,
-    lower=0,
-    upper=5,
     show_progress_bars=False,
 ):
+    """compute average difference to ground truth costs
+
+    Args:
+        observations (torch.Tensor): observations to compute costs for
+        task (Task): task object
+        cost_fn (Callable): cost function
+        npe (DirectPosterior): npe posterior
+        nn (FeedforwardNN): neural network
+        parameter (int, optional): parameter. Defaults to None.
+        num_samples (int, optional): number of samples from NPE. Defaults to 1000.
+        show_progress_bars (whether to show progress during sampling, optional): Show progress bar during sampling from NPE. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
     a_grid = torch.arange(task.action_low, task.action_high, 2.0)
 
     diff_per_obs_nn = []  # obs x actions
@@ -28,15 +43,21 @@ def compute_mean_distance(
     for i, obs in enumerate(observations):
         if task.task_name == "toy_example":
             posterior_costs = task.expected_posterior_costs(
-                x=obs, a=a_grid, lower=lower, upper=upper, resolution=1000, cost_fn=cost_fn
+                x=obs, a=a_grid, cost_fn=cost_fn, param=parameter
             ).squeeze()
-            # TODO print("lower/upper fixed!!")
         else:
             posterior_costs = torch.tensor(
-                [task.expected_posterior_costs(x=i + 1, a=a, param=parameter, cost_fn=cost_fn) for a in a_grid]
+                [
+                    task.expected_posterior_costs(
+                        x=i + 1, a=a, param=parameter, cost_fn=cost_fn
+                    )
+                    for a in a_grid
+                ]
             )
 
-        npe_samples = npe.sample((num_samples,), x=obs, show_progress_bars=show_progress_bars)
+        npe_samples = npe.sample(
+            (num_samples,), x=obs, show_progress_bars=show_progress_bars
+        )
         npe_costs = expected_posterior_costs_given_posterior_samples(
             post_samples=task.param_aggregation(npe_samples),
             actions=task.actions,
@@ -60,17 +81,38 @@ def compute_mean_distance(
 def expected_costs_wrapper(
     x: torch.Tensor,
     a: torch.Tensor,
-    task,
-    dist: str,
-    cost_fn,
-    param,
+    task: Task,
+    method: str,
+    cost_fn: Callable,
+    param: int,
     verbose: bool = True,
-    nn=None,
-    npe=None,
+    nn: FeedforwardNN = None,
+    npe: DirectPosterior = None,
     npe_samples=1000,
     idx=None,
     show_progress_bars=False,
-):
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+) -> torch.Tensor:
+    """Wrapper function for expected costs, returns inf if actions are invalid
+
+    Args:
+        x (torch.Tensor): observation
+        a (torch.Tensor): action
+        task (Task): task
+        method (str): method used to estimate expected costs, one of ["posterior", "nn", "npe"]
+        cost_fn (Callable): cost function
+        param (int): parameter
+        verbose (bool, optional): indicate invalid actions. Defaults to True.
+        nn (FeedforwardNN, optional): neural network. Defaults to None.
+        npe (DirectPosterior, optional): npe posterior. Defaults to None.
+        npe_samples (int, optional): number of samples from npe posterior. Defaults to 1000.
+        idx (int, optional): index for sbibm benchmark task. Defaults to None.
+        show_progress_bars (bool, optional): show progress during npe sampling. Defaults to False.
+        device (torch.device, optional): device. Defaults to torch.device("cuda" if torch.cuda.is_available() else "cpu").
+
+    Returns:
+        torch.Tensor: expected costs
+    """
     # make sure tensors are 2D
     if x is not None:
         x = atleast_2d(x)
@@ -87,43 +129,51 @@ def expected_costs_wrapper(
     if a.numel() == a.shape[0]:
         # turn into row vector (works as a is 1D)
         # necessary because gradient ascent assumes a to be a column vector
-        # print("Turn a into row vector.")
         a = a.reshape(1, -1)
 
-    assert dist in ["posterior", "nn", "npe"]
+    assert method in ["posterior", "nn", "npe"]
 
     # check if actions are valid
     inside_range = task.actions.is_valid(a)
     a_valid = a[:, inside_range]
     if verbose and not (inside_range).all():
-        print("Some actions are invalid, expected costs with be inf for those actions. ")
+        print(
+            "Some actions are invalid, expected costs with be inf for those actions. "
+        )
 
     expected_costs = torch.empty_like(a)
     expected_costs[:, torch.logical_not(inside_range)] = torch.inf
 
-    if dist == "posterior":
+    if method == "posterior":
         if task.task_name == "toy_example":
-            expected_costs[:, inside_range] = task.expected_posterior_costs(x=x, a=a_valid, cost_fn=cost_fn)
+            expected_costs[:, inside_range] = task.expected_posterior_costs(
+                x=x, a=a_valid, cost_fn=cost_fn
+            )
         else:
             expected_costs[:, inside_range] = task.expected_posterior_costs(
                 x=idx, a=a_valid, param=param, cost_fn=cost_fn
             )
 
-    elif dist == "nn":
+    elif method == "nn":
         assert nn is not None, "Provide trained NN to evaluate costs."
+        nn.to(device)
         # turn a into column vector again, repeat x to match the number of actions
         expected_costs[:, inside_range] = nn(x.repeat(a_valid.shape[1], 1), a_valid.T).T
         # expected_costs[:, inside_range] = nn(x, a_valid)
-    elif dist == "npe":
+    elif method == "npe":
         assert (npe is not None and type(npe_samples) == int) or (
             type(npe_samples) == torch.Tensor
         ), f"Provide trained NPE ({(npe is not None and type(npe_samples) == int)}) or samples ({type(npe_samples) == torch.Tensor}) to evaluate costs."
         if type(npe_samples) == torch.Tensor:
             pass  # print("Using provided samples")
         else:
-            npe_samples = npe.sample((npe_samples,), x=x, show_progress_bars=show_progress_bars)
-        expected_costs[:, inside_range] = expected_posterior_costs_given_posterior_samples(
-            post_samples=task.param_aggregation(npe_samples),
+            npe_samples = npe.sample(
+                (npe_samples,), x=x, show_progress_bars=show_progress_bars
+            ).to(device)
+        expected_costs[
+            :, inside_range
+        ] = expected_posterior_costs_given_posterior_samples(
+            post_samples=task.param_aggregation(npe_samples).to(device),
             actions=task.actions,
             a=a_valid,
             param=param,
@@ -137,23 +187,45 @@ def expected_costs_wrapper(
 def reverse_costs(
     x: torch.Tensor,
     a: torch.Tensor,
-    task=None,
-    dist: str = None,
-    cost_fn=None,
-    param=None,
+    task: Task = None,
+    method: str = None,
+    cost_fn: Callable = None,
+    param: int = None,
     verbose: bool = False,
-    nn=None,
-    npe=None,
-    npe_samples=1000,
-    idx=None,
-    show_progress_bars=False,
-    max_cost=1,
+    nn: FeedforwardNN = None,
+    npe: DirectPosterior = None,
+    npe_samples: int = 1000,
+    idx: int = None,
+    show_progress_bars: bool = False,
+    max_cost: float = 1,
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ) -> torch.Tensor:
+    """Compute reverse costs for gradient ascent
+
+    Args:
+        x (torch.Tensor): observation
+        a (torch.Tensor): action
+        task (Task, optional): task. Defaults to None.
+        method (str, optional): method used to estimate the expected costs, one of ["posterior", "nn", "npe"]. Defaults to None.
+        cost_fn (Callable, optional): cost function. Defaults to None.
+        param (int, optional): paramter. Defaults to None.
+        verbose (bool, optional): indicate invalid actions. Defaults to False.
+        nn (FeedforwardNN, optional): neural network. Defaults to None.
+        npe (DirectPosterior, optional): npe posterior. Defaults to None.
+        npe_samples (int, optional): samples from npe posterior. Defaults to 1000.
+        idx (int, optional): index for sbibm benchmark tasks. Defaults to None.
+        show_progress_bars (bool, optional): indicator whether to show progress. Defaults to False.
+        max_cost (float, optional): maximal cost. Defaults to 1.
+        device (torch.device, optional): device. Defaults to torch.device("cuda" if torch.cuda.is_available() else "cpu").
+
+    Returns:
+        torch.Tensor: 1 - expected costs
+    """
     return max_cost - expected_costs_wrapper(
         x=x,
         a=a,
         task=task,
-        dist=dist,
+        method=method,
         cost_fn=cost_fn,
         param=param,
         nn=nn,
@@ -166,30 +238,54 @@ def reverse_costs(
 
 
 def find_optimal_action(
-    x,
-    task,
-    dist: str,
-    cost_fn,
-    param,
+    x: torch.Tensor,
+    task: Task,
+    method: str,
+    cost_fn: Callable,
+    param: int,
     verbose: bool = True,
-    nn=None,
-    npe=None,
-    npe_samples=1000,
+    nn: FeedforwardNN = None,
+    npe: DirectPosterior = None,
+    npe_samples: int = 1000,
     num_initial_actions=100,
-    idx=None,
-    show_progress_bars=False,
-    max_cost=1,
+    idx: int = None,
+    show_progress_bars: bool = False,
+    max_cost: float = 1,
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    assert dist in ["posterior", "nn", "npe"]
-    if task.task_name != "toy_example":
-        assert idx is not None, "Provide index of observation to compute incurred costs under true posterior."
+    """Find optimal action with gradient descent
 
-    initial_actions = task.actions.sample(num_initial_actions)
+    Args:
+        x (torch.Tensor): observation
+        task (Task): task
+        method (str): method used to estimate the expected costs
+        cost_fn (Callable): cost function
+        param (int): paramter
+        verbose (bool, optional): indicate invalid actions. Defaults to True.
+        nn (FeedforwardNN, optional): neural network. Defaults to None.
+        npe (DirectPosterior, optional): npe posterior. Defaults to None.
+        npe_samples (int, optional): number of samples from npe to estimate costs. Defaults to 1000.
+        num_initial_actions (int, optional): number of initial actions. Defaults to 100.
+        idx (int, optional): index in case of sbibm benchmark task to identify the reference observation/posterior. Defaults to None.
+        show_progress_bars (bool, optional): indicator whether to show progress. Defaults to False.
+        max_cost (float, optional): maximal cost. Defaults to 1.
+        device (torch.device, optional): device. Defaults to torch.device("cuda" if torch.cuda.is_available() else "cpu").
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: optimal action, estimated costs, ground truth costs of optimal action
+    """
+    assert method in ["posterior", "nn", "npe"]
+    if task.task_name != "toy_example":
+        assert (
+            idx is not None
+        ), "Provide index of observation to compute incurred costs under true posterior."
+
+    initial_actions = task.actions.sample(num_initial_actions).to(device)
     reverse_costs_given_x = partial(
         reverse_costs,
-        x,
+        x.to(device),
         task=task,
-        dist=dist,
+        method=method,
         cost_fn=cost_fn,
         param=param,
         nn=nn,
@@ -207,8 +303,12 @@ def find_optimal_action(
 
     # costs under true posterior
     if task.task_name == "toy_example":
-        costs_under_posterior = task.expected_posterior_costs(x=x, a=best_action, cost_fn=cost_fn)
+        costs_under_posterior = task.expected_posterior_costs(
+            x=x, a=best_action, cost_fn=cost_fn
+        ).squeeze(1)
     else:
-        costs_under_posterior = task.expected_posterior_costs(x=idx, a=best_action, param=param, cost_fn=cost_fn)
+        costs_under_posterior = task.expected_posterior_costs(
+            x=idx, a=best_action, param=param, cost_fn=cost_fn
+        ).squeeze(1)
 
     return best_action, 1 - estimated_costs, costs_under_posterior
