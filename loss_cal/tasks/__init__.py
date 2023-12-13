@@ -1,4 +1,5 @@
 from typing import Any
+import torch
 
 
 def get_task(task_name: str, action_type="continuous", **kwargs: Any):
@@ -46,3 +47,58 @@ def get_task(task_name: str, action_type="continuous", **kwargs: Any):
 
     else:
         raise NotImplementedError()
+
+
+def get_task_specs(task_name):
+    task_dict = {
+        "toy_example": {
+            "action_type": "continuous",
+            "param": 0,
+            "factor": 2,
+            "exponential": 2,
+            "aligned": True,
+            "offset": 0.0,
+            "lr": 1e-3,
+        },
+        "sir": {
+            "action_type": "continuous",
+            "param": None,
+            "factor": 2,
+            "exponential": 2,
+            "aligned": False,
+            "offset": 1.0,
+            "lr": 1e-3,
+        },
+        "lotka_volterra": {
+            "action_type": "continuous",
+            "param": "?",
+            "factor": 3,
+            "exponential": 2,
+            "aligned": True,
+            "offset": 0.0,
+            "lr": 0.005,
+        },
+        "linear_gaussian": {
+            "action_type": "continuous",
+            "param": None,
+            "factor": 0.5,
+            "exponential": 2,
+            "aligned": True,
+            "offset": torch.abs(get_task("linear_gaussian").param_high[0]).item(),
+            "lr": 1e-3,
+        },
+        "bvep": {
+            "action_type": "discrete",
+            "param": None,
+            "num_actions": 3,
+            "thresholds": "[-3.05,-2.05]",
+            "transform": "Sigmoid",
+            "lr": 1e-3,
+        },
+    }
+
+    assert (
+        task_name in task_dict.keys()
+    ), f"Provided task must be one of {list(task_dict.keys())}"
+
+    return task_dict[task_name]
