@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
 from loss_cal.npe import train_npe
-from loss_cal.utils.utils import check_base_dir_exists, create_seed_dir, load_data
+from loss_cal.utils.utils import load_data, create_filestructure
 
 
 @hydra.main(version_base=None, config_path="./configs/", config_name="config")
@@ -69,13 +69,11 @@ def main(cfg: DictConfig):
         theta_train = theta_train[:ntrain]
         x_train = x_train[:ntrain]
 
-    save_dir = path.join(cfg.res_dir, f"{task_name}/npe/")
-    check_base_dir_exists(save_dir)
-    save_dir_seeded = create_seed_dir(save_dir, seed=seed)
-    # prepare_filestructure(path.join(save_dir, "seeds", str(cfg.seed)))
+    save_dir_seeded = path.join(cfg.res_dir, f"{task_name}/npe/{seed}")
+    create_filestructure(save_dir_seeded)
 
     print(
-        f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir}\n"
+        f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir_seeded}\n"
     )
 
     print("Data shapes", x_train.shape, theta_train.shape)
@@ -96,7 +94,6 @@ def main(cfg: DictConfig):
     torch.save(
         npe_posterior,
         path.join(save_dir_seeded, f"{estimator}_n{ntrain}.pt"),
-        # path.join(save_dir, "seeds", str(cfg.seed), f"{estimator}_n{ntrain}.pt"),
     )
     print(f"Saved NPE at {save_dir_seeded}.")
 

@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from os import getcwd, mkdir, path
 from typing import Callable, Tuple
+from pathlib import Path
 
 import torch
 
@@ -110,19 +111,21 @@ def prepare_for_training(
     return model_dir
 
 
-def create_filestructure(model_dir: str):
+def create_filestructure(model_dir: str, print_cwd=True):
     """Create directory for model and checkpoints
 
     Args:
         model_dir (str): Path to save the model
     """
-    print(f"Current directory: '{getcwd()}'")
-    try:
-        mkdir(model_dir)
-        mkdir(path.join(model_dir, "checkpoints/"))
-        print(f"Created directory {model_dir}.")
-    except FileExistsError:
-        raise FileExistsError(f"Directory {model_dir} already exists.")
+    if print_cwd:
+        print(f"Current directory: '{getcwd()}'")
+    if Path(model_dir).is_dir():
+        print(
+            "Warning: Directory {model_dir} already exists, files might get overwritten."
+        )
+    else:
+        Path(model_dir).mkdir(parents=True, exist_ok=True)
+        print(f"Created directory '{model_dir}'.")
 
 
 def create_checkpoint_dir(model_dir: str):
@@ -132,11 +135,8 @@ def create_checkpoint_dir(model_dir: str):
         model_dir (str): root path of model
     """
     check_base_dir_exists(model_dir)
-    try:
-        mkdir(path.join(model_dir, "checkpoints/"))
-        print(f"Created directory '{path.join(model_dir, 'checkpoints/')}'.")
-    except FileExistsError:
-        print(f"Subdirectory 'checkpoints' already exists. Delete first if wanted.")
+    checkpoint_dir = path.join(model_dir, "checkpoints/")
+    create_filestructure(checkpoint_dir, print_cwd=False)
 
 
 def create_seed_dir(model_dir: str, seed: int):
@@ -150,13 +150,8 @@ def create_seed_dir(model_dir: str, seed: int):
         str: directory of newly created seed folder
     """
     check_base_dir_exists(model_dir)
-    new_dir = path.join(model_dir, str(seed))
-    try:
-        mkdir(new_dir)
-        print(f"Created directory '{new_dir}'.")
-    except FileExistsError:
-        print(f"Subdirectory for seed {seed} already exists. Delete first if wanted.")
-    return new_dir
+    seed_dir = path.join(model_dir, str(seed))
+    create_filestructure(seed_dir, print_cwd=False)
 
 
 def save_metadata(

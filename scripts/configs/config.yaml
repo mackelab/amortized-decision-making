@@ -6,9 +6,9 @@ defaults:
 
 seed: ???
 ntrain: 50000
-num_action_samples_train: 10
+num_action_samples_train: 1
 num_action_samples_val: 10
-sample_in_loop: False
+sample_in_loop: True
 data_dir: ../data/
 res_dir: ../results/
-experiment: ???
+experiment: ""

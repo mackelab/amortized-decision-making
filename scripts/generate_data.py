@@ -18,7 +18,6 @@ def main(args):
     action_type = args.type
 
     n_train = args.ntrain
-    n_val = args.nval
     n_test = args.ntest
 
     # print(f"task {task}, n_train {n_train}")
@@ -28,31 +27,24 @@ def main(args):
     assert action_type in ["discrete", "continuous"]
 
     if task_name == "toy_example":
-        task = ToyExample()
+        task = ToyExample(action_type=action_type)
         prior = task.get_prior()
         simulator = task.get_simulator()
-        factor, exponential = 2, 3
     elif task_name == "lotka_volterra":
-        task = LotkaVolterra()
+        task = LotkaVolterra(action_type=action_type)
         prior = task.get_prior()
         simulator = task.get_simulator()
-        factor, exponential = 2, 2
     elif task_name == "sir":
         task = SIR()
-        prior = task.get_prior()
+        prior = task.get_prior(action_type=action_type)
         simulator = task.get_simulator()
-        factor, exponential = 1, 2
-
     elif task_name == "linear_gaussian":
         task = LinGauss()
         prior = task.get_prior()
         simulator = task.get_simulator()
-        factor, exponential = 0.5, 2
-
-    actions = task.actions
 
     print("Sample parameter values.")
-    thetas = task.sample_prior(n_train + n_test + n_val)
+    thetas = task.sample_prior(n_train + n_test)
     print(thetas.shape)
     print("Run simulator.")
     observations = []
@@ -62,27 +54,17 @@ def main(args):
     observations = torch.vstack(observations)
     print(observations.shape)
 
-    if action_type != "discrete":
-        print("Sample actions.")
-        actions = actions.sample(thetas.shape[0])
-        torch.save(actions[:n_train], path.join(args.data_dir, task_name, "actions_train.pt"))
-        torch.save(actions[n_train : n_train + n_val], path.join(args.data_dir, task_name, "actions_val.pt"))
-        torch.save(actions[n_train + n_val :], path.join(args.data_dir, task_name, "actions_test.pt"))
-
     # save data
     print("Save data.")
     torch.save(thetas[:n_train], path.join(args.data_dir, task_name, "theta_train.pt"))
-    torch.save(observations[:n_train], path.join(args.data_dir, task_name, "x_train.pt"))
     torch.save(
-        thetas[n_train : n_train + n_val],
-        path.join(args.data_dir, task_name, "theta_val.pt"),
+        observations[:n_train], path.join(args.data_dir, task_name, "x_train.pt")
     )
+    torch.save(thetas[n_train:], path.join(args.data_dir, task_name, "theta_test.pt"))
     torch.save(
-        observations[n_train : n_train + n_val],
-        path.join(args.data_dir, task_name, "x_val.pt"),
+        observations[n_train:],
+        path.join(args.data_dir, task_name, "x_test.pt"),
     )
-    torch.save(thetas[n_train + n_val :], path.join(args.data_dir, task_name, "theta_test.pt"))
-    torch.save(observations[n_train + n_val :], path.join(args.data_dir, task_name, "x_test.pt"))
 
     print(f"Saved data to '{path.join(args.data_dir, task_name)}'.")
 
@@ -103,9 +85,12 @@ if __name__ == "__main__":
         help="Type of actions. One of ['discrete', 'continuous']",
     )
 
-    parser.add_argument("--ntrain", type=int, default=500000, help="Number of training samples")
-    parser.add_argument("--nval", type=int, default=100000, help="Number of validation samples")
-    parser.add_argument("--ntest", type=int, default=100000, help="Number of test samples")
+    parser.add_argument(
+        "--ntrain", type=int, default=500000, help="Number of training samples"
+    )
+    parser.add_argument(
+        "--ntest", type=int, default=100000, help="Number of test samples"
+    )
     parser.add_argument(
         "--data_dir",
         default="../data/",
