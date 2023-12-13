@@ -1,0 +1,54 @@
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loss_cal"
+authors = [
+    {name = "Mila Gorecki", email = "mila.gorecki@tuebingen.mpg.de"},
+]
+description = "package for paper 'Amoritzed Decision Making for simulation-based models"
+version = "1.0"
+dynamic = ["readme"]
+requires-python = ">=3.8"
+dependencies = ["torch", "numpy", "matplotlib", "sbi", "diffeqtorch", "sbibm", "hydra-core"]
+
+[project.optional-dependencies]
+dev = ["autopep8", "isort", "pylint"]
+
+doc = ["myst-parser",
+"sphinx",
+"sphinx_rtd_theme"]
+
+[tool.setuptools.packages.find]
+include = ["loss_cal"]
+
+[tool.setuptools.dynamic]
+readme = { file = "README.md" }
+
+# Autopep8
+[tool.autopep8]
+max_line_length = 100
+aggressive = 1
+
+# isort
+[tool.isort]
+profile = "google"
+force_single_line = false
+multi_line_output = 4
+line_length = 100
+src_paths = ["mypkg"]
+
+# Pylint
+[tool.pylint.MASTER]
+disable = ["attribute-defined-outside-init"]
+
+[tool.pylint.FORMAT]
+max-line-length = 100
+
+[tool.pylint.MESSAGES_CONTROL]
+disable = "invalid-name"
+
+
+
