@@ -1,8 +1,8 @@
 from functools import partial
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Union
 
 import torch
-from sbi.inference.posteriors import DirectPosterior
+from sbi.inference.posteriors import DirectPosterior, MCMCPosterior
 from sbi.utils.sbiutils import gradient_ascent
 from sbi.utils.torchutils import atleast_2d
 
@@ -87,8 +87,8 @@ def expected_costs_wrapper(
     param: int,
     verbose: bool = True,
     nn: FeedforwardNN = None,
-    npe: DirectPosterior = None,
-    npe_samples=1000,
+    posterior_estimator: Union[DirectPosterior, MCMCPosterior] = None,
+    estimator_samples=1000,
     idx=None,
     show_progress_bars=False,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
@@ -99,15 +99,15 @@ def expected_costs_wrapper(
         x (torch.Tensor): observation
         a (torch.Tensor): action
         task (Task): task
-        method (str): method used to estimate expected costs, one of ["posterior", "nn", "npe"]
+        method (str): method used to estimate expected costs, one of ["posterior", "nn", "npe", "nle", "abc"]
         cost_fn (Callable): cost function
         param (int): parameter
         verbose (bool, optional): indicate invalid actions. Defaults to True.
         nn (FeedforwardNN, optional): neural network. Defaults to None.
-        npe (DirectPosterior, optional): npe posterior. Defaults to None.
-        npe_samples (int, optional): number of samples from npe posterior. Defaults to 1000.
+        posterior_estimator (DirectPosterior| MCMPosterior, optional): estimated posterior. Defaults to None.
+        estimator_samples (int, optional): number of samples from estimated posterior. Defaults to 1000.
         idx (int, optional): index for sbibm benchmark task. Defaults to None.
-        show_progress_bars (bool, optional): show progress during npe sampling. Defaults to False.
+        show_progress_bars (bool, optional): show progress during sampling for the posterior. Defaults to False.
         device (torch.device, optional): device. Defaults to torch.device("cuda" if torch.cuda.is_available() else "cpu").
 
     Returns:
@@ -131,7 +131,7 @@ def expected_costs_wrapper(
         # necessary because gradient ascent assumes a to be a column vector
         a = a.reshape(1, -1)
 
-    assert method in ["posterior", "nn", "npe"]
+    assert method in ["posterior", "nn", "npe", "nle", "abc"]
 
     # check if actions are valid
     inside_range = task.actions.is_valid(a)
@@ -160,26 +160,28 @@ def expected_costs_wrapper(
         # turn a into column vector again, repeat x to match the number of actions
         expected_costs[:, inside_range] = nn(x.repeat(a_valid.shape[1], 1), a_valid.T).T
         # expected_costs[:, inside_range] = nn(x, a_valid)
-    elif method == "npe":
-        assert (npe is not None and type(npe_samples) == int) or (
-            type(npe_samples) == torch.Tensor
-        ), f"Provide trained NPE ({(npe is not None and type(npe_samples) == int)}) or samples ({type(npe_samples) == torch.Tensor}) to evaluate costs."
-        if type(npe_samples) == torch.Tensor:
+    elif method in ["npe", "nle"]:
+        assert (posterior_estimator is not None and type(estimator_samples) == int) or (
+            type(estimator_samples) == torch.Tensor
+        ), f"Provide trained posterior estimator ({(posterior_estimator is not None and type(estimator_samples) == int)}) or samples ({type(estimator_samples) == torch.Tensor}) to evaluate costs."
+        if type(estimator_samples) == torch.Tensor:
             pass  # print("Using provided samples")
         else:
-            npe_samples = npe.sample(
-                (npe_samples,), x=x, show_progress_bars=show_progress_bars
+            estimator_samples = posterior_estimator.sample(
+                (estimator_samples,), x=x, show_progress_bars=show_progress_bars
             ).to(device)
         expected_costs[
             :, inside_range
         ] = expected_posterior_costs_given_posterior_samples(
-            post_samples=task.param_aggregation(npe_samples).to(device),
+            post_samples=task.param_aggregation(estimator_samples).to(device),
             actions=task.actions,
             a=a_valid,
             param=param,
             cost_fn=cost_fn,
             verbose=verbose,
         )
+    else:
+        raise NotImplementedError
 
     return expected_costs.flatten()
 
@@ -193,8 +195,8 @@ def reverse_costs(
     param: int = None,
     verbose: bool = False,
     nn: FeedforwardNN = None,
-    npe: DirectPosterior = None,
-    npe_samples: int = 1000,
+    posterior_estimator: Union[DirectPosterior, MCMCPosterior] = None,
+    estimator_samples: int = 1000,
     idx: int = None,
     show_progress_bars: bool = False,
     max_cost: float = 1,
@@ -206,13 +208,13 @@ def reverse_costs(
         x (torch.Tensor): observation
         a (torch.Tensor): action
         task (Task, optional): task. Defaults to None.
-        method (str, optional): method used to estimate the expected costs, one of ["posterior", "nn", "npe"]. Defaults to None.
+        method (str, optional): method used to estimate the expected costs, one of ["posterior", "nn", "npe", "nle", "abc"]. Defaults to None.
         cost_fn (Callable, optional): cost function. Defaults to None.
         param (int, optional): paramter. Defaults to None.
         verbose (bool, optional): indicate invalid actions. Defaults to False.
         nn (FeedforwardNN, optional): neural network. Defaults to None.
-        npe (DirectPosterior, optional): npe posterior. Defaults to None.
-        npe_samples (int, optional): samples from npe posterior. Defaults to 1000.
+        posterior_estimator (DirectPosterior | MCMCPosterior, optional): estimated posterior. Defaults to None.
+        estimator_samples (int, optional): samples from estimated posterior. Defaults to 1000.
         idx (int, optional): index for sbibm benchmark tasks. Defaults to None.
         show_progress_bars (bool, optional): indicator whether to show progress. Defaults to False.
         max_cost (float, optional): maximal cost. Defaults to 1.
@@ -229,8 +231,8 @@ def reverse_costs(
         cost_fn=cost_fn,
         param=param,
         nn=nn,
-        npe=npe,
-        npe_samples=npe_samples,
+        posterior_estimator=posterior_estimator,
+        estimator_samples=estimator_samples,
         verbose=verbose,
         idx=idx,
         show_progress_bars=show_progress_bars,
@@ -245,8 +247,8 @@ def find_optimal_action(
     param: int,
     verbose: bool = True,
     nn: FeedforwardNN = None,
-    npe: DirectPosterior = None,
-    npe_samples: int = 1000,
+    posterior_estimator: Union[DirectPosterior, MCMCPosterior] = None,
+    estimator_samples: int = 1000,
     num_initial_actions=100,
     idx: int = None,
     show_progress_bars: bool = False,
@@ -263,8 +265,8 @@ def find_optimal_action(
         param (int): paramter
         verbose (bool, optional): indicate invalid actions. Defaults to True.
         nn (FeedforwardNN, optional): neural network. Defaults to None.
-        npe (DirectPosterior, optional): npe posterior. Defaults to None.
-        npe_samples (int, optional): number of samples from npe to estimate costs. Defaults to 1000.
+        posterior_estimator (DirectPosterior| MCMPosterior, optional): estimated posterior. Defaults to None.
+        estimator_samples (int, optional): number of samples from posterior estimator to estimate costs. Defaults to 1000.
         num_initial_actions (int, optional): number of initial actions. Defaults to 100.
         idx (int, optional): index in case of sbibm benchmark task to identify the reference observation/posterior. Defaults to None.
         show_progress_bars (bool, optional): indicator whether to show progress. Defaults to False.
@@ -274,7 +276,7 @@ def find_optimal_action(
     Returns:
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: optimal action, estimated costs, ground truth costs of optimal action
     """
-    assert method in ["posterior", "nn", "npe"]
+    assert method in ["posterior", "nn", "npe", "nle", "abc"]
     if task.task_name != "toy_example":
         assert (
             idx is not None
@@ -289,8 +291,8 @@ def find_optimal_action(
         cost_fn=cost_fn,
         param=param,
         nn=nn,
-        npe=npe,
-        npe_samples=npe_samples,
+        posterior_estimator=posterior_estimator,
+        estimator_samples=estimator_samples,
         verbose=verbose,
         idx=idx,
         show_progress_bars=show_progress_bars,
