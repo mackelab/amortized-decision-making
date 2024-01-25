@@ -252,6 +252,8 @@ def find_optimal_action(
     num_initial_actions=100,
     idx: int = None,
     show_progress_bars: bool = False,
+    use_grid_search: bool = True,  ## TODO: assumes actions are 1D
+    grid_resolution: int = 10_000,
     max_cost: float = 1,
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -299,9 +301,40 @@ def find_optimal_action(
         max_cost=max_cost,
     )
 
-    best_action, estimated_costs = gradient_ascent(
-        potential_fn=reverse_costs_given_x, inits=initial_actions, theta_transform=None
-    )
+    # Find best action using grid search
+    if use_grid_search:
+        print("Using grid search.")
+        if task.action_type == "continuous":
+            actions_linspace = torch.linspace(
+                task.action_low, task.action_high, grid_resolution
+            )
+            costs_linspace = expected_costs_wrapper(
+                x.to(device),
+                a=actions_linspace,
+                task=task,
+                method=method,
+                cost_fn=cost_fn,
+                param=param,
+                nn=nn,
+                posterior_estimator=posterior_estimator,
+                estimator_samples=estimator_samples,
+                verbose=verbose,
+                idx=idx,
+                show_progress_bars=show_progress_bars,
+            )
+            best_action = actions_linspace[costs_linspace.argmin()]
+            estimated_costs = 1 - costs_linspace.min()
+        else:
+            raise NotImplementedError
+
+    else:
+        print("Using gradient descent.")
+        # Find best action using gradient descent
+        best_action, estimated_costs = gradient_ascent(
+            potential_fn=reverse_costs_given_x,
+            inits=initial_actions,
+            theta_transform=None,
+        )
 
     # costs under true posterior
     if task.task_name == "toy_example":
