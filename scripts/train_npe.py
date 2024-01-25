@@ -8,8 +8,8 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
-from loss_cal.npe import train_npe
-from loss_cal.utils.utils import load_data, create_filestructure
+from bam.npe import train_npe
+from bam.utils.utils import load_data, create_filestructure
 
 
 @hydra.main(version_base=None, config_path="./configs/", config_name="config")
@@ -45,8 +45,8 @@ def main(cfg: DictConfig):
 
     assert cfg.model.type == "npe"
 
-    estimator = cfg.model.estimator
-    assert estimator in [
+    density_estimator = cfg.model.density_estimator
+    assert density_estimator in [
         "nsf",
         "maf",
     ], "Density estimator has to be either 'nsf' or 'maf'."
@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
     create_filestructure(save_dir_seeded)
 
     print(
-        f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir_seeded}\n"
+        f"Training posterior with {cfg.ntrain} simulations: \ndensity estimator: {density_estimator}\ndata at: {path.join(cfg.data_dir, task_name)}\nsave at: {save_dir_seeded}\n"
     )
 
     print("Data shapes", x_train.shape, theta_train.shape)
@@ -81,7 +81,7 @@ def main(cfg: DictConfig):
         task_name=task_name,
         theta_train=theta_train,
         x_train=x_train,
-        neural_net=estimator,
+        neural_net=density_estimator,
         max_num_epochs=epochs,
         device=device,
         seed=seed,
@@ -93,7 +93,7 @@ def main(cfg: DictConfig):
 
     torch.save(
         npe_posterior,
-        path.join(save_dir_seeded, f"{estimator}_n{ntrain}.pt"),
+        path.join(save_dir_seeded, f"{density_estimator}_n{ntrain}.pt"),
     )
     print(f"Saved NPE at {save_dir_seeded}.")
 

@@ -11,9 +11,9 @@ from sbi.utils.sbiutils import Standardize, seed_all_backends
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from loss_cal.actions import Action
-from loss_cal.tasks import get_task
-from loss_cal.utils.utils import atleast_2d_col, create_checkpoint_dir, load_data
+from bam.actions import Action
+from bam.tasks import get_task
+from bam.utils.utils import atleast_2d_col, create_checkpoint_dir, load_data
 
 # from loss_cal.costs import BCELoss_weighted
 

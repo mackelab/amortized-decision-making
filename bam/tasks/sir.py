@@ -3,8 +3,8 @@ from typing import List
 import matplotlib.pyplot as plt
 import torch
 
-from loss_cal.actions import CategoricalAction, UniformAction
-from loss_cal.tasks.task import BenchmarkTask
+from bam.actions import CategoricalAction, UniformAction
+from bam.tasks.task import BenchmarkTask
 
 
 class SIR(BenchmarkTask):

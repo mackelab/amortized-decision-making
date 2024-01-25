@@ -10,7 +10,7 @@ from sbi.utils.get_nn_models import posterior_nn
 from sbi.utils.sbiutils import seed_all_backends
 from sbibm.algorithms.sbi.utils import wrap_posterior, wrap_prior_dist
 
-from loss_cal.tasks import get_task
+from bam.tasks import get_task
 
 
 def train_npe(

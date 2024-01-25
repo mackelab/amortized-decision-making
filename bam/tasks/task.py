@@ -9,7 +9,7 @@ from sbi.utils.torchutils import atleast_2d
 from sbibm.algorithms.sbi.utils import wrap_prior_dist, wrap_simulator_fn
 from torch import Tensor
 
-from loss_cal.actions import Action
+from bam.actions import Action
 
 
 class Task:

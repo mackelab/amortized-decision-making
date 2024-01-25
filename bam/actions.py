@@ -5,7 +5,7 @@ import torch
 from sbi.utils import BoxUniform
 from torch import Tensor
 
-from loss_cal.utils.utils import atleast_2d_col
+from bam.utils.utils import atleast_2d_col
 
 
 class Action:

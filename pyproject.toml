@@ -4,7 +4,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "loss_cal"
+name = "bam"
 authors = [
     {name = "Mila Gorecki", email = "mila.gorecki@tuebingen.mpg.de"},
 ]
@@ -22,7 +22,7 @@ doc = ["myst-parser",
 "sphinx_rtd_theme"]
 
 [tool.setuptools.packages.find]
-include = ["loss_cal"]
+include = ["bam"]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md" }

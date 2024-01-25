@@ -121,7 +121,7 @@ def create_filestructure(model_dir: str, print_cwd=True):
         print(f"Current directory: '{getcwd()}'")
     if Path(model_dir).is_dir():
         print(
-            "Warning: Directory {model_dir} already exists, files might get overwritten."
+            f"Warning: Directory {model_dir} already exists, files might get overwritten."
         )
     else:
         Path(model_dir).mkdir(parents=True, exist_ok=True)

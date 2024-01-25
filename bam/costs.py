@@ -3,7 +3,7 @@ from typing import Callable, List
 import torch
 from sbi.utils.torchutils import atleast_2d
 
-from loss_cal.actions import Action
+from bam.actions import Action
 
 
 def RevGaussCost(

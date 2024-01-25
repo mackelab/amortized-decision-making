@@ -17,8 +17,8 @@ from scipy.signal import find_peaks, hilbert, savgol_filter
 from scipy.stats import kurtosis, moment, skew
 from torch import Tensor
 
-from loss_cal.actions import CategoricalAction, UniformAction
-from loss_cal.tasks.task import Task
+from bam.actions import CategoricalAction, UniformAction
+from bam.tasks.task import Task
 
 
 class BVEP(Task):

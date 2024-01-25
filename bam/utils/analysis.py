@@ -6,9 +6,9 @@ from sbi.inference.posteriors import DirectPosterior
 from sbi.utils.sbiutils import gradient_ascent
 from sbi.utils.torchutils import atleast_2d
 
-from loss_cal.bam import FeedforwardNN
-from loss_cal.costs import expected_posterior_costs_given_posterior_samples
-from loss_cal.tasks.task import Task
+from bam.bam import FeedforwardNN
+from bam.costs import expected_posterior_costs_given_posterior_samples
+from bam.tasks.task import Task
 
 
 def compute_mean_distance(
