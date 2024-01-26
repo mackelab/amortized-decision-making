@@ -3,6 +3,7 @@ from typing import Callable, Tuple, Union
 
 import torch
 from sbi.inference.posteriors import DirectPosterior, MCMCPosterior
+from sbi.inference import ABC
 from sbi.utils.sbiutils import gradient_ascent
 from sbi.utils.torchutils import atleast_2d
 
@@ -88,7 +89,7 @@ def expected_costs_wrapper(
     verbose: bool = True,
     nn: FeedforwardNN = None,
     posterior_estimator: Union[DirectPosterior, MCMCPosterior] = None,
-    estimator_samples=1000,
+    estimator_samples: Union[int, torch.Tensor] = 1000,
     idx=None,
     show_progress_bars=False,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
@@ -180,6 +181,22 @@ def expected_costs_wrapper(
             cost_fn=cost_fn,
             verbose=verbose,
         )
+    elif method == "abc":
+        # assert type(estimator_samples) == torch.Tensor, "Provide ABC samples."
+        print("ABC Sample from posterior")
+        inference = ABC(task.get_simulator(), task.get_prior_dist())
+        estimator_samples = inference(x, num_simulations=1000, quantile=0.1)
+        expected_costs[
+            :, inside_range
+        ] = expected_posterior_costs_given_posterior_samples(
+            post_samples=task.param_aggregation(estimator_samples).to(device),
+            actions=task.actions,
+            a=a_valid,
+            param=param,
+            cost_fn=cost_fn,
+            verbose=verbose,
+        )
+
     else:
         raise NotImplementedError
 
