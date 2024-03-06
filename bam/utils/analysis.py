@@ -184,15 +184,23 @@ def expected_costs_wrapper(
     elif method == "abc":
         # assert type(estimator_samples) == torch.Tensor, "Provide ABC samples."
         if type(estimator_samples) == torch.Tensor:
-            print("Using provided ABC samples")
+            print(f"Using provided ABC samples")
             pass
         else:
-            print("ABC Sample from posterior")
+            print(
+                f"Sample {estimator_samples} from ABC posterior, q={100.0 / estimator_samples}"
+            )
             inference = ABC(task.get_simulator(), task.get_prior_dist())
             # num_simulations = ntrain used for other methods
-            estimator_samples = inference(
-                x, num_simulations=estimator_samples, quantile=100.0 / estimator_samples
-            ).to(device)
+            estimator_samples, summary = inference(
+                x,
+                num_simulations=estimator_samples,
+                quantile=100.0 / estimator_samples,
+                return_summary=True,
+            )
+            estimator_samples = estimator_samples.to(device)
+
+            print("Mean distances:", summary["distances"].mean())
 
         expected_costs[
             :, inside_range
