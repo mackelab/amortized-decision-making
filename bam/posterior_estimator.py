@@ -111,9 +111,7 @@ def train_neural_estimator(
             method=sampler,
             num_chains=num_mcmc_chains,
         )
-    elif method.lower() == "abc":
-        raise NotImplementedError
-    elif method.lower() == "nre":
+    else:
         raise NotImplementedError
 
     return posterior

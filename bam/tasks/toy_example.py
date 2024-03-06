@@ -87,8 +87,12 @@ class ToyExample(Task):
         """
         mean = self.simulator_mean(theta)
         noise_dist = Normal(
-            torch.tensor(mean).to(self.device),
-            torch.tensor(self.simulator_std).to(self.device),
+            mean.to(self.device)
+            if isinstance(mean, torch.Tensor)
+            else torch.tensor(mean).to(self.device),
+            self.simulator_std.to(self.device)
+            if isinstance(self.simulator_std, torch.Tensor)
+            else torch.tensor(self.simulator_std).to(self.device),
         )
         return noise_dist.log_prob(x).to(self.device)
 
