@@ -12,10 +12,10 @@ import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 from sbi.utils.sbiutils import seed_all_backends
 
-from loss_cal.costs import MultiClass01Cost, MultiClassStepCost, RevGaussCost
-from loss_cal.bam import build_nn, train
-from loss_cal.tasks import get_task
-from loss_cal.utils.utils import load_data, prepare_for_training, save_metadata
+from bam.costs import MultiClass01Cost, MultiClassStepCost, RevGaussCost
+from bam.bam import build_nn, train
+from bam.tasks import get_task
+from bam.utils.utils import load_data, prepare_for_training, save_metadata
 
 
 @hydra.main(version_base=None, config_path="./configs/", config_name="config")
