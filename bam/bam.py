@@ -550,6 +550,7 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer):
 def load_predictors(
     task_name: str,
     dir: str,
+    nsim: int = None,
     data_dir: str = "./data",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     **task_specifications,
@@ -594,11 +595,18 @@ def load_predictors(
 
     order_files = lambda file: get_nsim(file) + get_param(file)
 
-    model_files.sort(key=order_files)
-    metadata_files.sort(
-        key=lambda file: int(file["ntrain"])
-        + (int(file["parameter"]) if file["parameter"] is not None else 0)
-    )
+    if nsim is None:
+        model_files.sort(key=order_files)
+        metadata_files.sort(
+            key=lambda file: int(file["ntrain"])
+            + (int(file["parameter"]) if file["parameter"] is not None else 0)
+        )
+    else:
+        print(f"nsim={nsim}")
+        model_files = [m for m in model_files if get_nsim(m) == nsim]
+        print(f"model files = {model_files}")
+        metadata_files = [m for m in metadata_files if m["ntrain"] == nsim]
+        print(f"metadata_file={metadata_files}")
 
     print("Loading models:")
     str_to_tranformation = {

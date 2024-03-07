@@ -157,6 +157,7 @@ def load_neural_estimators(dir: str, nsim: int = None, flow: str = "nsf"):
             estimators.append(npe)
             nsim.append(get_nsim(file))
     else:
+        print(f"Loading estimator trained on {nsim} simulations:")
         estimators = torch.load(path.join(dir, f"{flow}_n{nsim}.pt"))
 
     return estimators, nsim

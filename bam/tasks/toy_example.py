@@ -30,7 +30,7 @@ class ToyExample(Task):
         self.param_low, self.param_high = prior_params["low"], prior_params["high"]
         param_range = {"low": self.param_low, "high": self.param_high}
         parameter_aggregation = lambda params: params
-        prior_dist = BoxUniform(**prior_params, device=device.type)
+        prior_dist = BoxUniform(**prior_params)  # , device=device.type)
 
         self.simulator_mean = lambda theta: 50 + 0.5 * theta * (5 - theta) ** 4
         self.simulator_std = 10.0
@@ -87,12 +87,16 @@ class ToyExample(Task):
         """
         mean = self.simulator_mean(theta)
         noise_dist = Normal(
-            mean.to(self.device)
-            if isinstance(mean, torch.Tensor)
-            else torch.tensor(mean).to(self.device),
-            self.simulator_std.to(self.device)
-            if isinstance(self.simulator_std, torch.Tensor)
-            else torch.tensor(self.simulator_std).to(self.device),
+            (
+                mean.to(self.device)
+                if isinstance(mean, torch.Tensor)
+                else torch.tensor(mean).to(self.device)
+            ),
+            (
+                self.simulator_std.to(self.device)
+                if isinstance(self.simulator_std, torch.Tensor)
+                else torch.tensor(self.simulator_std).to(self.device)
+            ),
         )
         return noise_dist.log_prob(x).to(self.device)
 
