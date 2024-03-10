@@ -5,10 +5,10 @@ from os import getcwd, path
 
 import torch
 
-from loss_cal.tasks.linear_gaussian import LinGauss
-from loss_cal.tasks.lotka_volterra import LotkaVolterra
-from loss_cal.tasks.sir import SIR
-from loss_cal.tasks.toy_example import ToyExample
+from bam.tasks.linear_gaussian import LinGauss
+from bam.tasks.lotka_volterra import LotkaVolterra
+from bam.tasks.sir import SIR
+from bam.tasks.toy_example import ToyExample
 
 torch.manual_seed(758)
 
