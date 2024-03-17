@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, Union
 
 import torch
 from sbi.utils.torchutils import atleast_2d
@@ -32,21 +32,43 @@ def RevGaussCost(
     ), "provide list with minimum and maximum value for rescaling"
 
     def cost_fn(
-        true_theta: torch.Tensor or float,
-        action: torch.Tensor or float,
+        true_theta: torch.Tensor,
+        action: torch.Tensor,
     ):
         """cost function
 
         Args:
-            true_theta (torch.Tensor or float): true parameter values
-            action (torch.Tensor or float): actions
+            true_theta (torch.Tensor): true parameter values
+            action (torch.Tensor): actions
 
         Returns:
             torch.Tensor: incurred costs
+
+        Notes:
+            scenarios:
+            batch - same number of theta (n,d) and actions (n,1) -> costs: (n,1) one scalar for every pair
+            same actions for all theta - theta (m,d), action (1,1) -> costs (m,1) one scalar for every theta
+            same theta for all actions - theta (1,d), action (n,1) -> costs (n,1) one scalar for every action
+            to evaluate expected costs: theta (m,d) actions (n,1) loop over m or n to compute costs for every pair
         """
-        assert isinstance(true_theta, torch.Tensor) or isinstance(
-            action, torch.Tensor
-        ), "One of the inputs has to be a torch.Tensor."
+        assert (
+            isinstance(true_theta, torch.Tensor)
+            and isinstance(action, torch.Tensor)
+            and true_theta.ndim == 2
+            and action.ndim == 2
+        ), "Provide inputs as 2D torch.Tensor."
+        m, d = true_theta.shape
+        n, e = action.shape
+        assert d == e, "Second dimension has to be equal."
+
+        if d > 1:
+            # to get the outer product (m,n,d)
+            true_theta = true_theta.reshape(m, d, 1)
+            action = action.permute((1, 0))  # transpose
+        elif d == 1 and m != n:
+            action = action.permute((1, 0))  # transpose
+
+        # print("true_theta shape", true_theta.shape, action.shape)
 
         # rescale to be within [0,10]
         rescaled_action = rescale(
@@ -66,14 +88,25 @@ def RevGaussCost(
             std = factor / (
                 torch.abs(max_val - torch.abs(rescaled_theta - rescaled_offset)) + 0.1
             )
-            return 1 - torch.exp(
+            costs = 1 - torch.exp(
                 -((rescaled_theta - rescaled_action) ** 2) / std**exponential
             )
         else:
             std = factor / (torch.abs(rescaled_theta - rescaled_offset) + 0.1)
-            return 1 - torch.exp(
+            costs = 1 - torch.exp(
                 -((rescaled_theta - rescaled_action) ** 2) / std**exponential
             )
+
+        # print("true_theta shape", true_theta.shape)
+        # print("costs shape", costs.shape)
+        if d > 1:
+            costs = costs.permute((0, 2, 1))  # (m,n,d)
+            # print("aggregate costs over parameters")
+            return costs.mean(dim=-1)
+        elif d == 1 and m != n:
+            return costs.permute((1, 0))  # transpose
+        else:
+            return costs
 
     return cost_fn
 
