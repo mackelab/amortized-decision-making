@@ -289,21 +289,23 @@ def expected_posterior_costs_given_posterior_samples(
         torch.Tensor: expected costs
     """
     # make sure tensors are 2D
-    a = atleast_2d(a)
+    a = atleast_2d(a)  # assume (n,d)
     if verbose and not (actions.is_valid(a)).all():
         print(
             "Some actions are invalid, expected costs with be inf for those actions. "
         )
 
-    expected_costs = torch.empty_like(a)
+    expected_costs = torch.empty(a.shape[0])
     mask = actions.is_valid(a)
-    expected_costs[:, torch.logical_not(mask)] = torch.inf
+    a_valid = a[mask]
+    expected_costs[torch.logical_not(mask)] = torch.inf
 
-    if param is not None:
+    if param is not None:  # restrict posterior samples to one parameter if given
         post_samples = post_samples[:, param : param + 1]
+        incurred_costs = cost_fn(post_samples, a_valid)
+    else:
+        incurred_costs = cost_fn(post_samples, a_valid, pairwise=True)
 
-    a_valid = a[:, mask]
-    incurred_costs = cost_fn(post_samples, a_valid)
     # expected posterior costs
-    expected_costs[:, mask] = incurred_costs.mean(dim=0)
+    expected_costs[mask] = incurred_costs.mean(dim=0)  # mean over theta
     return expected_costs
