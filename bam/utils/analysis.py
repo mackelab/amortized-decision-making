@@ -142,16 +142,16 @@ def expected_costs_wrapper(
             "Some actions are invalid, expected costs with be inf for those actions. "
         )
 
-    expected_costs = torch.empty((a.shape[0], 1))
+    expected_costs = torch.empty((a.shape[0]))
     expected_costs[torch.logical_not(inside_range)] = torch.inf
 
     if method == "posterior":
         if task.task_name == "toy_example":
-            expected_costs[:, inside_range] = task.expected_posterior_costs(
+            expected_costs[inside_range] = task.expected_posterior_costs(
                 x=x, a=a_valid, cost_fn=cost_fn
             )
         else:
-            expected_costs[:, inside_range] = task.expected_posterior_costs(
+            expected_costs[inside_range] = task.expected_posterior_costs(
                 x=idx, a=a_valid, param=param, cost_fn=cost_fn
             )
 
@@ -161,7 +161,9 @@ def expected_costs_wrapper(
         # turn a into column vector again, repeat x to match the number of actions
         # print("nn inputs", x.repeat(a_valid.shape[0], 1).shape, a_valid.shape)
         # print("nn out", nn(x.repeat(a_valid.shape[0], 1), a_valid).shape)
-        expected_costs[inside_range] = nn(x.repeat(a_valid.shape[0], 1), a_valid)
+        expected_costs[inside_range] = nn(
+            x.repeat(a_valid.shape[0], 1), a_valid
+        ).squeeze()
         # expected_costs[:, inside_range] = nn(x, a_valid)
     elif method in ["npe", "nle"]:
         assert (posterior_estimator is not None and type(estimator_samples) == int) or (
@@ -173,15 +175,13 @@ def expected_costs_wrapper(
             estimator_samples = posterior_estimator.sample(
                 (estimator_samples,), x=x, show_progress_bars=show_progress_bars
             ).to(device)
-        expected_costs[:, inside_range] = (
-            expected_posterior_costs_given_posterior_samples(
-                post_samples=task.param_aggregation(estimator_samples).to(device),
-                actions=task.actions,
-                a=a_valid,
-                param=param,
-                cost_fn=cost_fn,
-                verbose=verbose,
-            )
+        expected_costs[inside_range] = expected_posterior_costs_given_posterior_samples(
+            post_samples=task.param_aggregation(estimator_samples).to(device),
+            actions=task.actions,
+            a=a_valid,
+            param=param,
+            cost_fn=cost_fn,
+            verbose=verbose,
         )
     elif method == "abc":
         # assert type(estimator_samples) == torch.Tensor, "Provide ABC samples."
@@ -204,15 +204,13 @@ def expected_costs_wrapper(
 
             print("Mean distances:", summary["distances"].mean())
 
-        expected_costs[:, inside_range] = (
-            expected_posterior_costs_given_posterior_samples(
-                post_samples=task.param_aggregation(estimator_samples).to(device),
-                actions=task.actions,
-                a=a_valid,
-                param=param,
-                cost_fn=cost_fn,
-                verbose=verbose,
-            )
+        expected_costs[inside_range] = expected_posterior_costs_given_posterior_samples(
+            post_samples=task.param_aggregation(estimator_samples).to(device),
+            actions=task.actions,
+            a=a_valid,
+            param=param,
+            cost_fn=cost_fn,
+            verbose=verbose,
         )
 
     else:
