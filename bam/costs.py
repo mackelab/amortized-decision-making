@@ -137,8 +137,8 @@ def MultiClassStepCost(
     ), f"Provide one cost factor for every combination of actions (true, predicted), got {factors.numel()} == {(theta_crit.numel() - 1) ** 2}"
 
     def cost_fn(
-        true_theta: torch.Tensor or float,
-        action: torch.Tensor or float,
+        true_theta: Union[torch.Tensor, float],
+        action: Union[torch.Tensor, float],
     ):
         """cost function
 
@@ -189,8 +189,8 @@ def MultiClass01Cost(
     print("theta_crit extended: ", theta_crit)
 
     def cost_fn(
-        true_theta: torch.Tensor or float,
-        action: torch.Tensor or float,
+        true_theta: Union[torch.Tensor, float],
+        action: Union[torch.Tensor, float],
     ):
         """cost function
 
@@ -233,7 +233,9 @@ def StepCost_weighted(weights: list, threshold: float):
         len(weights) == 2
     ), f"Binary classification, expected 2 weights, got {len(weights)}"
 
-    def cost_fn(true_theta: torch.Tensor or float, action: torch.Tensor or float):
+    def cost_fn(
+        true_theta: Union[torch.Tensor, float], action: Union[torch.Tensor, float]
+    ):
         """step function
 
         Args:
@@ -270,7 +272,7 @@ def expected_posterior_costs_given_posterior_samples(
     actions: Action,
     a: torch.Tensor,
     cost_fn: Callable,
-    param: int or None,
+    param: Union[int, None],
     verbose: bool = True,
 ):
     """Compute expected costs under the posterior given x and a,  E_p(theta|x)[C(theta, a)]

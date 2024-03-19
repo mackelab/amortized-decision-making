@@ -46,7 +46,7 @@ class Action:
 class UniformAction(Action):
     """class for continuous action spaces"""
 
-    def __init__(self, low: Union[float | Tensor], high: Union[float | Tensor]) -> None:
+    def __init__(self, low: Union[float, Tensor], high: Union[float, Tensor]) -> None:
         """create uniform, continuous actions space
 
         Args:
