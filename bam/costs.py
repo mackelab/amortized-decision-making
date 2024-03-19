@@ -7,8 +7,8 @@ from bam.actions import Action
 
 
 def RevGaussCost(
-    parameter_range: List[float],
-    action_range: List[float] = None,
+    parameter_range: List[torch.Tensor],
+    action_range: List[torch.Tensor] = None,
     factor: float = 1.0,
     exponential: int = 1,
     max_val: float = 10.0,
@@ -30,11 +30,11 @@ def RevGaussCost(
     assert (
         isinstance(action_range, list) and len(action_range) == 2
     ), "provide list with minimum and maximum value for rescaling"
+    assert isinstance(parameter_range[0], torch.Tensor) and isinstance(
+        action_range[0], torch.Tensor
+    ), "provide min/max of ranges as tensor"
 
-    def cost_fn(
-        true_theta: torch.Tensor,
-        action: torch.Tensor,
-    ):
+    def cost_fn(true_theta: torch.Tensor, action: torch.Tensor, pairwise: bool = False):
         """cost function
 
         Args:
@@ -60,13 +60,9 @@ def RevGaussCost(
         m, d = true_theta.shape
         n, e = action.shape
         assert d == e, "Second dimension has to be equal."
-
-        if d > 1:
-            # to get the outer product (m,n,d)
-            true_theta = true_theta.reshape(m, d, 1)
-            action = action.permute((1, 0))  # transpose
-        elif d == 1 and m != n:
-            action = action.permute((1, 0))  # transpose
+        assert (
+            m == n if not pairwise else True
+        ), "Provide same number of samples or compute pairwise costs by setting flag pairwise=True."
 
         # print("true_theta shape", true_theta.shape, action.shape)
 
@@ -84,6 +80,11 @@ def RevGaussCost(
             new_max=max_val,
         )
 
+        if pairwise:  # d >1
+            # to get the outer product (m,n,d)
+            rescaled_theta = rescaled_theta.reshape(m, d, 1)
+            rescaled_action = rescaled_action.permute((1, 0))  # transpose
+            rescaled_offset = rescaled_offset.reshape(-1, 1)
         if not aligned:
             std = factor / (
                 torch.abs(max_val - torch.abs(rescaled_theta - rescaled_offset)) + 0.1
@@ -97,14 +98,14 @@ def RevGaussCost(
                 -((rescaled_theta - rescaled_action) ** 2) / std**exponential
             )
 
-        # print("true_theta shape", true_theta.shape)
-        # print("costs shape", costs.shape)
-        if d > 1:
+        if pairwise:  # d > 1
             costs = costs.permute((0, 2, 1))  # (m,n,d)
             # print("aggregate costs over parameters")
             return costs.mean(dim=-1)
-        elif d == 1 and m != n:
-            return costs.permute((1, 0))  # transpose
+        elif d > 1:
+            return costs.mean(dim=-1, keepdim=True)
+        # elif d == 1 and m != n:
+        #     return costs.permute((1, 0))  # transpose
         else:
             return costs
 

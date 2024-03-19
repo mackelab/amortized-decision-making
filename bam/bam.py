@@ -360,7 +360,7 @@ def train(
 
             # L2 loss
             costs_batch = cost_fn(theta_batch, a_batch)
-            batch_loss = ((costs_batch - predictions) ** 2).mean(dim=0)
+            batch_loss = ((costs_batch - predictions) ** 2).mean()
             train_loss_sum += batch_loss.item()
 
             batch_loss.backward()
@@ -384,7 +384,7 @@ def train(
             for x_val_batch, theta_val_batch, a_val_batch in val_loader:
                 val_preds_batch = model(x_val_batch, a_val_batch)
                 val_costs_batch = cost_fn(theta_val_batch, a_val_batch)
-                val_batch_loss = ((val_costs_batch - val_preds_batch) ** 2).mean(dim=0)
+                val_batch_loss = ((val_costs_batch - val_preds_batch) ** 2).mean()
                 val_loss_sum += val_batch_loss.item()
 
         avg_val_loss = val_loss_sum / len(val_loader)

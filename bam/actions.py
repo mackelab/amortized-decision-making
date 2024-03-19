@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Callable
+from typing import Callable, Union
 
 import torch
 from sbi.utils import BoxUniform
@@ -46,16 +46,27 @@ class Action:
 class UniformAction(Action):
     """class for continuous action spaces"""
 
-    def __init__(self, low: float, high: float) -> None:
+    def __init__(self, low: Union[float | Tensor], high: Union[float | Tensor]) -> None:
         """create uniform, continuous actions space
 
         Args:
             low (float): lower boundary
             high (float): upper boundary
         """
-        self.low = low
-        self.high = high
-        self.dist = BoxUniform([low], [high])
+        assert type(low) == type(high)
+
+        if isinstance(low, float):
+            self.dist = BoxUniform([low], [high])
+        else:
+            self.dist = BoxUniform(low, high)
+        self.low = self.dist.base_dist.low
+        self.high = self.dist.base_dist.high
+        if self.low.numel == 1:
+            self.dim = 1
+        else:
+            assert self.low.ndim == 1, "Restricted to 1D tensors."
+            self.dim = self.low.numel()
+            print(f"dim of actions: {self.dim}")
 
     def get_bounds(self):
         """return boundaries"""
@@ -70,7 +81,10 @@ class UniformAction(Action):
         Returns:
             torch.Tensor: indicator whether action lies within boundaries
         """
-        return torch.logical_and(a >= self.low, a <= self.high).flatten()
+        if a.ndim == 1:
+            torch.logical_and(a >= self.low, a <= self.high).flatten()
+        else:
+            return torch.logical_and(a >= self.low, a <= self.high).all(dim=1)
 
     def preselect_actions_by_cost(
         self, cost_fn: Callable, theta: Tensor, n_sample: int = 10, n_select: int = 2

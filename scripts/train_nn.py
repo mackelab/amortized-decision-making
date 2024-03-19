@@ -70,6 +70,11 @@ def main(cfg: DictConfig):
                 task.param_low[0].squeeze().item(),
                 task.param_high[0].squeeze().item(),
             ]
+        elif task_name == "lotka_volterra":
+            print("Run LV on all parameters.")
+            task_specifications["restrict_param"] = False
+            task = get_task(task_name=task_name, **task_specifications)
+            parameter_range = [task.param_low, task.param_high]
         else:
             print("Task not defined without specified parameter!")
             raise (NotImplementedError)
@@ -98,10 +103,10 @@ def main(cfg: DictConfig):
         cost_fn = RevGaussCost(
             parameter_range=parameter_range,
             action_range=action_range,
-            factor=factor,
-            exponential=exponential,
-            aligned=aligned,
-            offset=offset,
+            factor=factor,  ## Check: for multi-D might be a tensor/list
+            exponential=exponential,  ## Check: for multi-D might be a tensor/list
+            aligned=aligned,  ## Check: for multi-D might be a tensor/list
+            offset=offset,  ## Check: for multi-D might be a tensor/list
         )
     else:
         raise NotImplementedError(
@@ -153,7 +158,11 @@ def main(cfg: DictConfig):
         model,
         cfg.experiment,
         str(seed),
-        f"{num_action_samples_train}actions" if not sample_actions_in_loop else "inloop"
+        (
+            f"{num_action_samples_train}actions"
+            if not sample_actions_in_loop
+            else "inloop"
+        ),
         #  " ".join([str(cfg.model.hidden).replace(", ", "-")[1:-1], cfg.model.output_transform]),
     )
     print("Saving model at:", save_dir)
@@ -163,9 +172,11 @@ def main(cfg: DictConfig):
         ntrain=ntrain,
         parameter=parameter,
         action_type=action_type,
-        action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
-        if action_type == "discrete"
-        else (factor, exponential),
+        action_parameters=(
+            ([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
+            if action_type == "discrete"
+            else (factor, exponential)
+        ),
     )
     save_metadata(
         model_dir,
@@ -177,9 +188,11 @@ def main(cfg: DictConfig):
         z_scoring=z_scoring,
         parameter=parameter,
         action_type=action_type,
-        action_parameters=([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
-        if action_type == "discrete"
-        else (factor, exponential),
+        action_parameters=(
+            ([round(t, ndigits=4) for t in theta_crit.tolist()], costs)
+            if action_type == "discrete"
+            else (factor, exponential)
+        ),
         num_action_samples_train=num_action_samples_train,
         num_action_samples_val=num_action_samples_val,
         sample_in_loop=sample_actions_in_loop,

@@ -10,7 +10,11 @@ from bam.tasks.task import BenchmarkTask
 
 class LotkaVolterra(BenchmarkTask):
     def __init__(
-        self, action_type: str, num_actions: int = None, probs: List = None
+        self,
+        action_type: str,
+        num_actions: int = None,
+        probs: List = None,
+        restrict_param: bool = True,
     ) -> None:
         assert action_type in ["binary", "continuous"]
 
@@ -28,7 +32,8 @@ class LotkaVolterra(BenchmarkTask):
             actions = CategoricalAction(num_actions=num_actions, probs=probs)
 
         else:
-            self.action_low, self.action_high = 0.0, 100.0
+            self.action_low = torch.Tensor([0.0] if restrict_param else [0.0] * 4)
+            self.action_high = torch.Tensor([100.0] if restrict_param else [100.0] * 4)
             actions = UniformAction(
                 low=self.action_low, high=self.action_high
             )  # percentage of rabbits to shoot
@@ -40,9 +45,12 @@ class LotkaVolterra(BenchmarkTask):
     def rescale(self, action: torch.Tensor, param: int):
         bounds = self.param_range
         if param == None:
-            return action * (5.0 - 0.0) / (self.action_high - self.action_low)
-
-            # return action * (bounds["high"][0] - bounds["low"][0]) / (self.action_high - self.action_low)
+            # return action * (5.0 - 0.0) / (self.action_high - self.action_low)
+            return (
+                action
+                * (bounds["high"] - bounds["low"])
+                / (self.action_high - self.action_low)
+            )
         else:
             return (
                 action

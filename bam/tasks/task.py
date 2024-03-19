@@ -204,7 +204,7 @@ class BenchmarkTask(Task):
         self, x: int, a: Tensor, cost_fn: Callable[..., Any], param: int, verbose=True
     ) -> Tensor:
         assert type(x) == int, "Provide index of the reference observation."
-        a = atleast_2d(a)
+        a = atleast_2d(a)  # assume (n,d)
         if verbose and not (self.actions.is_valid(a)).all():
             print(
                 "Some actions are invalid, expected costs with be inf for those actions. "
@@ -212,17 +212,21 @@ class BenchmarkTask(Task):
 
         post = self.get_reference_samples(n=x).to(self.device)
 
-        expected_costs = torch.empty_like(a).to(self.device)
+        expected_costs = torch.empty(a.shape[0]).to(self.device)
         mask = self.actions.is_valid(a)
-        a_valid = a[:, mask]
-        expected_costs[:, torch.logical_not(mask)] = torch.inf
+        # a_valid = a[:, mask]
+        # expected_costs[:, torch.logical_not(mask)] = torch.inf
+        a_valid = a[mask]
+        expected_costs[torch.logical_not(mask)] = torch.inf
 
         if param is not None:  # restrict posterior samples to one parameter if given
             post = post[:, param : param + 1]
             incurred_costs = cost_fn(post, a_valid)
         else:
-            incurred_costs = cost_fn(self.param_aggregation(post), a_valid)
-        expected_costs[:, mask] = incurred_costs.mean(dim=0)
+            incurred_costs = cost_fn(
+                self.param_aggregation(post), a_valid, pairwise=True
+            )
+        expected_costs[mask] = incurred_costs.mean(dim=0)  # mean over theta
         return expected_costs
 
     def generate_data(
