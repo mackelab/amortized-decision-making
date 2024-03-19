@@ -87,10 +87,10 @@ class Task:
     @abstractmethod
     def expected_posterior_costs(
         self,
-        x: int or Tensor,
+        x: Union[int, Tensor],
         a: Tensor,
         cost_fn: Callable,
-        param: int or None,
+        param: Union[int, None],
         verbose=True,
     ) -> Tensor:
         """Compute expected costs under the posterior"""
