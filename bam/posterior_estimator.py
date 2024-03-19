@@ -39,6 +39,8 @@ def train_neural_estimator(
     max_num_epochs: Optional[int] = 2**31 - 1,
     num_mcmc_chains=100,  # default is 1
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    num_bins: int = 10,
+    num_components: int = 10,
     seed=0,
     **task_kwargs,
 ):
@@ -68,6 +70,8 @@ def train_neural_estimator(
             hidden_features=hidden_features,
             z_score_x=z_score_x,
             z_score_theta=z_score_theta,
+            num_bins=num_bins,  # number of splines
+            num_components=num_components,  # number of components in mdn
         )
 
         inference_method = SNPE_C(
